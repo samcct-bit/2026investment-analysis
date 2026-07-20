@@ -173,6 +173,7 @@ def generate_ai_report(stock_data):
     }
 
 @app.get("/api/stock/{ticker}")
+@app.get("/stock/{ticker}")
 def read_stock_data(ticker: str = "0050.TW"):
     data = get_stock_analysis(ticker)
     if not data:
@@ -187,10 +188,8 @@ def read_stock_data(ticker: str = "0050.TW"):
     }
 
 @app.get("/api/allocation")
+@app.get("/allocation")
 def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Query("dynamic")):
-    """
-    0050 ETF 與 2330 台積電 零股購買配重計算器 API
-    """
     data_0050 = get_stock_analysis("0050.TW")
     data_2330 = get_stock_analysis("2330.TW")
 
@@ -203,7 +202,6 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
     diff_0050 = data_0050["diff_20_pct"]
     diff_2330 = data_2330["diff_20_pct"]
 
-    # 依模式計算配重比例
     if mode == "safe":
         ratio_0050, ratio_2330 = 0.70, 0.30
         mode_title = "🛡️ 穩健大盤型 (0050: 70% | 2330: 30%)"
@@ -213,18 +211,15 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
     elif mode == "balanced":
         ratio_0050, ratio_2330 = 0.50, 0.50
         mode_title = "⚖️ 均衡配置型 (0050: 50% | 2330: 50%)"
-    else:  # dynamic 均線乖離動態調配
-        # 若 2330 跌幅更大，提高 2330 配重；反之亦然
+    else:  # dynamic
         if diff_2330 < diff_0050:
             extra = min(0.20, (diff_0050 - diff_2330) * 0.03)
             ratio_2330 = round(0.50 + extra, 2)
             ratio_0050 = round(1.0 - ratio_2330, 2)
-            reason = f"台積電(2330)負乖離率({diff_2330}%)大於 0050({diff_0050}%)，觸發折價動態加碼，提升台積電至 {int(ratio_2330*100)}%"
         else:
             extra = min(0.20, (diff_2330 - diff_0050) * 0.03)
             ratio_0050 = round(0.50 + extra, 2)
             ratio_2330 = round(1.0 - ratio_0050, 2)
-            reason = f"0050 負乖離率({diff_0050}%)大於 台積電({diff_2330}%)，觸發大盤動態加碼，提升 0050 至 {int(ratio_0050*100)}%"
         mode_title = f"🤖 均線乖離動態調配型 (0050: {int(ratio_0050*100)}% | 2330: {int(ratio_2330*100)}%)"
 
     budget_0050 = budget * ratio_0050
@@ -238,13 +233,6 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
 
     total_cost = round(cost_0050 + cost_2330, 2)
     remaining_cash = round(budget - total_cost, 2)
-
-    advice_summary = (
-        f"在總預算 **NT$ {int(budget):,} 元** 下，依據【{mode_title}】建議：\n"
-        f"• **0050.TW**：建議購買 **{shares_0050} 股**（單價 ${p_0050}，約需 ${int(cost_0050):,} 元）\n"
-        f"• **2330.TW (台積電)**：建議購買 **{shares_2330} 股**（單價 ${p_2330}，約需 ${int(cost_2330):,} 元）\n"
-        f"• **總估計花費**：${int(total_cost):,} 元（預備現金剩餘 ${int(remaining_cash):,} 元）"
-    )
 
     return {
         "success": True,
@@ -268,6 +256,5 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
             "ratio": ratio_2330
         },
         "total_cost": total_cost,
-        "remaining_cash": remaining_cash,
-        "advice_summary": advice_summary
+        "remaining_cash": remaining_cash
     }
