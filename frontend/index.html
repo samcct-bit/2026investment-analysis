@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>0050 AI 智慧投資分析與動態加碼監控系統</title>
+    <!-- Google Fonts & Chart.js -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 頂部 Header -->
+        <header class="app-header">
+            <div class="header-brand">
+                <div class="brand-icon">📈</div>
+                <div>
+                    <h1>0050 AI 智慧投資分析助理</h1>
+                    <p class="subtitle">動態加碼監控 | 20日均線防呆預警 | 資金分批配置</p>
+                </div>
+            </div>
+            <div class="header-search">
+                <input type="text" id="tickerInput" value="0050.TW" placeholder="輸入股票代碼 (例: 0050.TW, 2330.TW, AAPL)">
+                <button id="searchBtn">查詢分析</button>
+            </div>
+        </header>
+
+        <!-- 主要內容區域 -->
+        <main class="dashboard-grid">
+            <!-- 1. 核心數據指標卡片區 -->
+            <section class="metrics-row">
+                <div class="metric-card glass">
+                    <span class="card-label">目前股價</span>
+                    <div class="card-value" id="currentPrice">--</div>
+                    <span class="card-sub" id="latestDate">--</span>
+                </div>
+                <div class="metric-card glass">
+                    <span class="card-label">20 日月線 (20MA)</span>
+                    <div class="card-value" id="ma20Price">--</div>
+                    <span class="card-sub" id="diff20">--</span>
+                </div>
+                <div class="metric-card glass">
+                    <span class="card-label">相對強弱指標 (RSI)</span>
+                    <div class="card-value" id="rsiValue">--</div>
+                    <span class="card-sub">14日週期</span>
+                </div>
+                <div class="metric-card glass highlight" id="statusCard">
+                    <span class="card-label">狀態診斷</span>
+                    <div class="card-value status-text" id="statusText">讀取中...</div>
+                    <span class="card-sub" id="actionHint">自動防呆與單日紀錄</span>
+                </div>
+            </section>
+
+            <!-- 2. 圖表與 AI 診斷雙欄 -->
+            <section class="main-content-row">
+                <!-- 左欄：互動 K 線/走勢與均線圖表 -->
+                <div class="panel chart-panel glass">
+                    <div class="panel-header">
+                        <h3>📊 30 日歷史走勢與 20MA 均線</h3>
+                        <span class="badge" id="chartBadge">0050.TW</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="stockChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 右欄：AI 智慧加碼策略報告 -->
+                <div class="panel ai-panel glass">
+                    <div class="panel-header">
+                        <h3>🤖 AI 專家加碼與資金配置報告</h3>
+                    </div>
+                    <div class="ai-content" id="aiReportBox">
+                        <div class="loading-spinner">載入最新 AI 評估報告中...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. GAS 設定與說明區塊 -->
+            <section class="panel info-panel glass">
+                <div class="panel-header">
+                    <h3>🛠️ Google Apps Script (GAS) 自動化發信設定說明</h3>
+                </div>
+                <div class="gas-instructions">
+                    <div class="step-box">
+                        <span class="step-num">1</span>
+                        <h4>建立 Google 試算表</h4>
+                        <p>A2 填寫 <code>TPE:0050</code>，B2 填寫 <code>=GOOGLEFINANCE(A2, "price")</code></p>
+                    </div>
+                    <div class="step-box">
+                        <span class="step-num">2</span>
+                        <h4>部署 Apps Script</h4>
+                        <p>複製本專案 <code>gas/Code.gs</code> 程式碼至擴充功能編輯器中並儲存。</p>
+                    </div>
+                    <div class="step-box">
+                        <span class="step-num">3</span>
+                        <h4>設定日計時器</h4>
+                        <p>設定每日下午 1:00-2:00 自動執行 <code>check0050AndNotify</code>。</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
