@@ -203,6 +203,11 @@ body {
     font-weight: 600;
 }
 
+.highlight-badge {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning);
+}
+
 .chart-container {
     position: relative;
     height: 340px;
@@ -244,11 +249,91 @@ body {
     border-left: 3px solid var(--primary);
 }
 
+/* Calculator Panel */
+.calc-control-row {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr auto;
+    gap: 16px;
+    margin-bottom: 20px;
+    align-items: end;
+}
+
+@media (max-width: 768px) {
+    .calc-control-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.calc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.calc-field label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.calc-field input, .calc-field select {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--card-border);
+    color: var(--text-primary);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+}
+
+.calc-field button {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    border: none;
+    padding: 11px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.2s;
+}
+
+.calc-field button:hover {
+    filter: brightness(1.15);
+}
+
+.calc-results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.stock-alloc-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 18px;
+}
+
+.stock-alloc-card h4 {
+    font-size: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.share-count {
+    font-size: 24px;
+    font-weight: 700;
+    color: #60a5fa;
+    margin: 8px 0;
+}
+
 /* GAS Instructions */
 .gas-instructions {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 16px;
+}
 
 .step-box {
     background: rgba(15, 23, 42, 0.4);

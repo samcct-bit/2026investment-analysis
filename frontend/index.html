@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>0050 AI 智慧投資分析與動態加碼監控系統</title>
+    <title>0050 & 2330 台積電 AI 智慧投資分析與零股配重系統</title>
     <!-- Google Fonts & Chart.js -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,13 +18,13 @@
             <div class="header-brand">
                 <div class="brand-icon">📈</div>
                 <div>
-                    <h1>0050 AI 智慧投資分析助理</h1>
-                    <p class="subtitle">動態加碼監控 | 20日均線防呆預警 | 資金分批配置</p>
+                    <h1>0050 & 2330 AI 智慧投資分析助理</h1>
+                    <p class="subtitle">動態加碼監控 | 20日均線防呆預警 | 0050與台積電零股試算</p>
                 </div>
             </div>
             <div class="header-search">
-                <input type="text" id="tickerInput" value="0050.TW" placeholder="輸入股票代碼 (例: 0050.TW, 2330.TW, AAPL)">
-                <button id="searchBtn">查詢分析</button>
+                <input type="text" id="tickerInput" value="0050.TW" placeholder="輸入股票代碼 (例: 0050.TW, 2330.TW)">
+                <button id="searchBtn">查詢個股</button>
             </div>
         </header>
 
@@ -70,7 +70,7 @@
                 <!-- 右欄：AI 智慧加碼策略報告 -->
                 <div class="panel ai-panel glass">
                     <div class="panel-header">
-                        <h3>🤖 AI 專家加碼與資金配置報告</h3>
+                        <h3>🤖 AI 專家個股加碼報告</h3>
                     </div>
                     <div class="ai-content" id="aiReportBox">
                         <div class="loading-spinner">載入最新 AI 評估報告中...</div>
@@ -78,7 +78,39 @@
                 </div>
             </section>
 
-            <!-- 3. GAS 設定與說明區塊 -->
+            <!-- 3. 新增：0050 ETF 與 2330 台積電 零股購買配重計算器面板 -->
+            <section class="panel allocation-panel glass">
+                <div class="panel-header">
+                    <h3>⚖️ 0050 ETF 與 2330 (台積電) 零股配重與預算試算</h3>
+                    <span class="badge highlight-badge">零股最佳化計算器</span>
+                </div>
+
+                <div class="calc-control-row">
+                    <div class="calc-field">
+                        <label for="budgetInput">💡 擬投入總預算 (NTD)</label>
+                        <input type="number" id="budgetInput" value="30000" min="1000" step="1000">
+                    </div>
+                    <div class="calc-field">
+                        <label for="modeSelect">🎯 策略調配模式</label>
+                        <select id="modeSelect">
+                            <option value="dynamic" selected>🤖 均線乖離動態調配 (依折價自動權重)</option>
+                            <option value="safe">🛡️ 穩健大盤型 (0050: 70% | 2330: 30%)</option>
+                            <option value="balanced">⚖️ 均衡配置型 (0050: 50% | 2330: 50%)</option>
+                            <option value="growth">🚀 強攻積情型 (0050: 30% | 2330: 70%)</option>
+                        </select>
+                    </div>
+                    <div class="calc-field btn-field">
+                        <button id="calcBtn">計算最佳零股股數</button>
+                    </div>
+                </div>
+
+                <!-- 零股試算結果卡片展示區 -->
+                <div class="calc-results-grid" id="calcResultsBox">
+                    <div class="loading-spinner">計算 0050 與 2330 最佳零股分配中...</div>
+                </div>
+            </section>
+
+            <!-- 4. GAS 設定說明區塊 -->
             <section class="panel info-panel glass">
                 <div class="panel-header">
                     <h3>🛠️ Google Apps Script (GAS) 自動化發信設定說明</h3>

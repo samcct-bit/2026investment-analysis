@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 import numpy as np
 
-app = FastAPI(title="0050 AI Investment Analysis API", version="1.0.0")
+app = FastAPI(title="0050 & 2330 AI Investment Analysis API", version="1.1.0")
 
 def fetch_via_yahoo_api(symbol="0050.TW"):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=3mo"
@@ -42,7 +42,7 @@ def fetch_via_yahoo_api(symbol="0050.TW"):
         df.set_index("Date", inplace=True)
         return df
     except Exception as e:
-        print(f"Yahoo HTTP API Fetch Error: {e}")
+        print(f"Yahoo HTTP API Fetch Error for {symbol}: {e}")
         return None
 
 def get_stock_analysis(ticker_symbol="0050.TW"):
@@ -90,9 +90,11 @@ def get_stock_analysis(ticker_symbol="0050.TW"):
 
     is_drop_below_ma20 = current_price < ma_20
 
+    name = "元大台灣50" if "0050" in ticker_clean else ("台積電" if "2330" in ticker_clean else ticker_clean)
+
     return {
         "ticker": ticker_clean,
-        "name": "元大台灣50" if "0050" in ticker_clean else ticker_clean,
+        "name": name,
         "latest_date": str(df.index[-1]),
         "current_price": current_price,
         "ma_20": ma_20,
@@ -122,7 +124,7 @@ def generate_ai_report(stock_data):
     tranche_3 = round(price * 0.94, 2)
 
     if is_dropped:
-        signal = "🚨【加碼訊號觸發】：現價已跌破 20日均線（月線）"
+        signal = f"🚨【加碼訊號觸發】：{stock_data['name']} 現價已跌破 20日均線（月線）"
         strategy = (
             f"目前股價 ${price} 較 20MA (${ma20}) 呈現負乖離 ({diff_pct}%)。"
             f"RSI 當前為 {rsi}。這代表短線呈現修正或右側佈局回檔點。"
@@ -134,7 +136,7 @@ def generate_ai_report(stock_data):
             "4. **風險叮嚀**：跌破均線常為短線轉弱特徵，嚴禁單次全額 All-in，務必保有現金流。"
         ]
     else:
-        signal = "🟢【觀望訊號】：現價高於 20日均線（月線）"
+        signal = f"🟢【觀望訊號】：{stock_data['name']} 現價高於 20日均線（月線）"
         strategy = (
             f"目前股價 ${price} 高於 20MA (${ma20})，正乖離為 +{diff_pct}%。"
             f"RSI 當前為 {rsi}。市場趨勢維持穩健或多頭格局。"
@@ -182,4 +184,90 @@ def read_stock_data(ticker: str = "0050.TW"):
         "success": True,
         "data": data,
         "ai_report": ai_report
+    }
+
+@app.get("/api/allocation")
+def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Query("dynamic")):
+    """
+    0050 ETF 與 2330 台積電 零股購買配重計算器 API
+    """
+    data_0050 = get_stock_analysis("0050.TW")
+    data_2330 = get_stock_analysis("2330.TW")
+
+    if not data_0050 or not data_2330:
+        return JSONResponse(status_code=500, content={"success": False, "message": "無法取得 0050 或 2330 之即時數據"})
+
+    p_0050 = data_0050["current_price"]
+    p_2330 = data_2330["current_price"]
+
+    diff_0050 = data_0050["diff_20_pct"]
+    diff_2330 = data_2330["diff_20_pct"]
+
+    # 依模式計算配重比例
+    if mode == "safe":
+        ratio_0050, ratio_2330 = 0.70, 0.30
+        mode_title = "🛡️ 穩健大盤型 (0050: 70% | 2330: 30%)"
+    elif mode == "growth":
+        ratio_0050, ratio_2330 = 0.30, 0.70
+        mode_title = "🚀 強攻積情型 (0050: 30% | 2330: 70%)"
+    elif mode == "balanced":
+        ratio_0050, ratio_2330 = 0.50, 0.50
+        mode_title = "⚖️ 均衡配置型 (0050: 50% | 2330: 50%)"
+    else:  # dynamic 均線乖離動態調配
+        # 若 2330 跌幅更大，提高 2330 配重；反之亦然
+        if diff_2330 < diff_0050:
+            extra = min(0.20, (diff_0050 - diff_2330) * 0.03)
+            ratio_2330 = round(0.50 + extra, 2)
+            ratio_0050 = round(1.0 - ratio_2330, 2)
+            reason = f"台積電(2330)負乖離率({diff_2330}%)大於 0050({diff_0050}%)，觸發折價動態加碼，提升台積電至 {int(ratio_2330*100)}%"
+        else:
+            extra = min(0.20, (diff_2330 - diff_0050) * 0.03)
+            ratio_0050 = round(0.50 + extra, 2)
+            ratio_2330 = round(1.0 - ratio_0050, 2)
+            reason = f"0050 負乖離率({diff_0050}%)大於 台積電({diff_2330}%)，觸發大盤動態加碼，提升 0050 至 {int(ratio_0050*100)}%"
+        mode_title = f"🤖 均線乖離動態調配型 (0050: {int(ratio_0050*100)}% | 2330: {int(ratio_2330*100)}%)"
+
+    budget_0050 = budget * ratio_0050
+    budget_2330 = budget * ratio_2330
+
+    shares_0050 = int(budget_0050 // p_0050)
+    shares_2330 = int(budget_2330 // p_2330)
+
+    cost_0050 = round(shares_0050 * p_0050, 2)
+    cost_2330 = round(shares_2330 * p_2330, 2)
+
+    total_cost = round(cost_0050 + cost_2330, 2)
+    remaining_cash = round(budget - total_cost, 2)
+
+    advice_summary = (
+        f"在總預算 **NT$ {int(budget):,} 元** 下，依據【{mode_title}】建議：\n"
+        f"• **0050.TW**：建議購買 **{shares_0050} 股**（單價 ${p_0050}，約需 ${int(cost_0050):,} 元）\n"
+        f"• **2330.TW (台積電)**：建議購買 **{shares_2330} 股**（單價 ${p_2330}，約需 ${int(cost_2330):,} 元）\n"
+        f"• **總估計花費**：${int(total_cost):,} 元（預備現金剩餘 ${int(remaining_cash):,} 元）"
+    )
+
+    return {
+        "success": True,
+        "budget": budget,
+        "mode": mode,
+        "mode_title": mode_title,
+        "data_0050": {
+            "price": p_0050,
+            "ma20": data_0050["ma_20"],
+            "diff_pct": diff_0050,
+            "shares": shares_0050,
+            "cost": cost_0050,
+            "ratio": ratio_0050
+        },
+        "data_2330": {
+            "price": p_2330,
+            "ma20": data_2330["ma_20"],
+            "diff_pct": diff_2330,
+            "shares": shares_2330,
+            "cost": cost_2330,
+            "ratio": ratio_2330
+        },
+        "total_cost": total_cost,
+        "remaining_cash": remaining_cash,
+        "advice_summary": advice_summary
     }

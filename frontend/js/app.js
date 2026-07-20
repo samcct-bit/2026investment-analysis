@@ -3,9 +3,11 @@ let stockChart = null;
 document.addEventListener("DOMContentLoaded", () => {
     const searchBtn = document.getElementById("searchBtn");
     const tickerInput = document.getElementById("tickerInput");
+    const calcBtn = document.getElementById("calcBtn");
 
-    // 初始載入 0050.TW 數據
+    // 初始載入 0050.TW 數據與零股試算
     loadStockData("0050.TW");
+    loadAllocationAdvice();
 
     searchBtn.addEventListener("click", () => {
         const ticker = tickerInput.value.trim() || "0050.TW";
@@ -17,6 +19,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const ticker = tickerInput.value.trim() || "0050.TW";
             loadStockData(ticker);
         }
+    });
+
+    calcBtn.addEventListener("click", () => {
+        loadAllocationAdvice();
     });
 });
 
@@ -80,6 +86,62 @@ async function loadStockData(ticker) {
         console.error("Fetch stock data error:", err);
         aiReportBox.innerHTML = `<div class="error-msg">⚠️ 系統連線異常或網路錯誤</div>`;
     }
+}
+
+async function loadAllocationAdvice() {
+    const calcResultsBox = document.getElementById("calcResultsBox");
+    const budget = document.getElementById("budgetInput").value || 30000;
+    const mode = document.getElementById("modeSelect").value || "dynamic";
+
+    calcResultsBox.innerHTML = '<div class="loading-spinner">試算 0050 與 2330 零股配重中...</div>';
+
+    try {
+        const response = await fetch(`/api/allocation?budget=${budget}&mode=${mode}`);
+        const resData = await response.json();
+
+        if (!resData.success) {
+            calcResultsBox.innerHTML = `<div class="error-msg">⚠️ 試算失敗: ${resData.message}</div>`;
+            return;
+        }
+
+        const d0 = resData.data_0050;
+        const d2 = resData.data_2330;
+
+        calcResultsBox.innerHTML = `
+            <div class="stock-alloc-card">
+                <h4>📊 0050 (元大台灣50) <span>配重 ${intPct(d0.ratio)}%</span></h4>
+                <p>目前股價：<strong>$${d0.price}</strong> | 20MA 乖離：<span style="color:${d0.diff_pct < 0 ? '#ef4444':'#10b981'}">${d0.diff_pct}%</span></p>
+                <div class="share-count">建議購買：${d0.shares} 股</div>
+                <p>預估花費金額：<strong>$${formatNum(d0.cost)}</strong> 元</p>
+            </div>
+
+            <div class="stock-alloc-card">
+                <h4>💎 2330 (台積電) <span>配重 ${intPct(d2.ratio)}%</span></h4>
+                <p>目前股價：<strong>$${d2.price}</strong> | 20MA 乖離：<span style="color:${d2.diff_pct < 0 ? '#ef4444':'#10b981'}">${d2.diff_pct}%</span></p>
+                <div class="share-count">建議購買：${d2.shares} 股</div>
+                <p>預估花費金額：<strong>$${formatNum(d2.cost)}</strong> 元</p>
+            </div>
+
+            <div class="stock-alloc-card" style="border-left: 4px solid #f59e0b;">
+                <h4>💡 試算總結與資金建議</h4>
+                <p><strong>{resData.mode_title}</strong></p>
+                <p style="margin: 8px 0;">總花費：<strong style="color: #60a5fa;">$${formatNum(resData.total_cost)}</strong> 元</p>
+                <p>剩餘預備現金：<strong>$${formatNum(resData.remaining_cash)}</strong> 元</p>
+            </div>
+        `;
+
+    } catch (err) {
+        console.error("Fetch allocation error:", err);
+        calcResultsBox.innerHTML = `<div class="error-msg">⚠️ 零股試算連線異常</div>`;
+    }
+}
+
+function intPct(ratio) {
+    return Math.round(ratio * 100);
+}
+
+function formatNum(num) {
+    return Number(num).toLocaleString('zh-TW');
 }
 
 function renderChart(history) {
