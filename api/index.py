@@ -4,9 +4,9 @@ import requests
 import pandas as pd
 import numpy as np
 
-app = FastAPI(title="0050 & 2330 AI Investment Analysis API", version="1.1.0")
+app = FastAPI(title="2330 台積電 AI 智慧投資分析 API", version="1.2.0")
 
-def fetch_via_yahoo_api(symbol="0050.TW"):
+def fetch_via_yahoo_api(symbol="2330.TW"):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=3mo"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -45,7 +45,7 @@ def fetch_via_yahoo_api(symbol="0050.TW"):
         print(f"Yahoo HTTP API Fetch Error for {symbol}: {e}")
         return None
 
-def get_stock_analysis(ticker_symbol="0050.TW"):
+def get_stock_analysis(ticker_symbol="2330.TW"):
     ticker_clean = ticker_symbol.upper()
     if not ticker_clean.endswith(".TW") and ticker_clean.isdigit():
         ticker_clean += ".TW"
@@ -90,7 +90,7 @@ def get_stock_analysis(ticker_symbol="0050.TW"):
 
     is_drop_below_ma20 = current_price < ma_20
 
-    name = "元大台灣50" if "0050" in ticker_clean else ("台積電" if "2330" in ticker_clean else ticker_clean)
+    name = "台積電" if "2330" in ticker_clean else ("元大台灣50" if "0050" in ticker_clean else ticker_clean)
 
     return {
         "ticker": ticker_clean,
@@ -127,24 +127,24 @@ def generate_ai_report(stock_data):
         signal = f"🚨【加碼訊號觸發】：{stock_data['name']} 現價已跌破 20日均線（月線）"
         strategy = (
             f"目前股價 ${price} 較 20MA (${ma20}) 呈現負乖離 ({diff_pct}%)。"
-            f"RSI 當前為 {rsi}。這代表短線呈現修正或右側佈局回檔點。"
+            f"RSI 當前為 {rsi}。這代表短線修正，為優秀的零股加碼進場點。"
         )
         recommendation = [
-            f"1. **第一批加碼價格**：${tranche_1}（現價即刻進場 1/3 預備金）",
-            f"2. **第二批防守價格**：${tranche_2}（若再下修 3% 補進 1/3 預備金）",
-            f"3. **第三批鐵板價格**：${tranche_3}（若拉回 6% 補齊最後 1/3 預備金）",
-            "4. **風險叮嚀**：跌破均線常為短線轉弱特徵，嚴禁單次全額 All-in，務必保有現金流。"
+            f"1. **第一批加碼價格**：${tranche_1}（現價即刻進場 1/3 零股）",
+            f"2. **第二批防守價格**：${tranche_2}（若再拉回 3% 補進 1/3 零股）",
+            f"3. **第三批鐵板價格**：${tranche_3}（若拉回 6% 補齊最後 1/3 零股）",
+            "4. **風險叮嚀**：跌破均線常為短線修正，嚴禁一次全額投入，分批佈局更能降成本。"
         ]
     else:
         signal = f"🟢【觀望訊號】：{stock_data['name']} 現價高於 20日均線（月線）"
         strategy = (
             f"目前股價 ${price} 高於 20MA (${ma20})，正乖離為 +{diff_pct}%。"
-            f"RSI 當前為 {rsi}。市場趨勢維持穩健或多頭格局。"
+            f"RSI 當前為 {rsi}。趨勢維持穩健多頭。"
         )
         recommendation = [
-            "1. **操作建議**：維持定期定額扣款，暫不執行額外手動加碼。",
-            f"2. **警戒下限設定**：若未來股價回檔至 ${ma20} 以下，系統將自動啟動加碼警示。",
-            "3. **資金控管**：將閒置交割戶資金維持高利活存或短天期債券，等待跌破月線訊號出現。"
+            "1. **操作建議**：維持定期定額扣款，暫不撥用預備金加碼。",
+            f"2. **警戒下限設定**：若未來股價回檔至 ${ma20} 以下，系統將自動跳出加碼提醒。",
+            "3. **資金控管**：將預備金維持高利活存，靜待台積電跌破月線時出擊。"
         ]
 
     report_html = f"""
@@ -152,7 +152,7 @@ def generate_ai_report(stock_data):
         <h3>{signal}</h3>
         <p class="report-strategy">{strategy}</p>
         <div class="report-section">
-            <h4>💡 專業加碼與資金分批計畫</h4>
+            <h4>💡 專屬台積電零股加碼計畫</h4>
             <ul>
                 {"".join([f"<li>{r}</li>" for r in recommendation])}
             </ul>
@@ -189,49 +189,39 @@ def read_stock_data(ticker: str = "2330.TW"):
 
 @app.get("/api/allocation")
 @app.get("/allocation")
-def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Query("dynamic")):
-    data_0050 = get_stock_analysis("0050.TW")
+def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Query("single")):
+    """
+    專屬台積電 (2330.TW) 零股購買試算器 (搭配 0050 大盤趨勢參考)
+    """
     data_2330 = get_stock_analysis("2330.TW")
+    data_0050 = get_stock_analysis("0050.TW")
 
-    if not data_0050 or not data_2330:
-        return JSONResponse(status_code=500, content={"success": False, "message": "無法取得 0050 或 2330 之即時數據"})
+    if not data_2330:
+        return JSONResponse(status_code=500, content={"success": False, "message": "無法取得台積電 2330 之即時數據"})
 
-    p_0050 = data_0050["current_price"]
     p_2330 = data_2330["current_price"]
-
-    diff_0050 = data_0050["diff_20_pct"]
+    ma_2330 = data_2330["ma_20"]
     diff_2330 = data_2330["diff_20_pct"]
 
-    if mode == "safe":
-        ratio_0050, ratio_2330 = 0.70, 0.30
-        mode_title = "🛡️ 穩健大盤型 (0050: 70% | 2330: 30%)"
-    elif mode == "growth":
-        ratio_0050, ratio_2330 = 0.30, 0.70
-        mode_title = "🚀 強攻積情型 (0050: 30% | 2330: 70%)"
-    elif mode == "balanced":
-        ratio_0050, ratio_2330 = 0.50, 0.50
-        mode_title = "⚖️ 均衡配置型 (0050: 50% | 2330: 50%)"
-    else:  # dynamic
-        if diff_2330 < diff_0050:
-            extra = min(0.20, (diff_0050 - diff_2330) * 0.03)
-            ratio_2330 = round(0.50 + extra, 2)
-            ratio_0050 = round(1.0 - ratio_2330, 2)
-        else:
-            extra = min(0.20, (diff_2330 - diff_0050) * 0.03)
-            ratio_0050 = round(0.50 + extra, 2)
-            ratio_2330 = round(1.0 - ratio_0050, 2)
-        mode_title = f"🤖 均線乖離動態調配型 (0050: {int(ratio_0050*100)}% | 2330: {int(ratio_2330*100)}%)"
+    # 大盤趨勢參考
+    m_price = data_0050["current_price"] if data_0050 else 0
+    m_diff = data_0050["diff_20_pct"] if data_0050 else 0
+    m_status = data_0050["status_text"] if data_0050 else "大盤資料讀取中"
 
-    budget_0050 = budget * ratio_0050
-    budget_2330 = budget * ratio_2330
+    # 策略試算
+    if mode == "tranche2":
+        mode_title = "⚖️ 二階段分批 (首批 50% 預算現價進場，50% 預留防守)"
+        ratio = 0.50
+    elif mode == "tranche3":
+        mode_title = "🛡️ 三階段鐵板分批 (首批 33% 預算現價進場，67% 預留防守)"
+        ratio = 0.33
+    else:  # single
+        mode_title = "🚀 單次即刻加碼 (100% 預算現價進場)"
+        ratio = 1.00
 
-    shares_0050 = int(budget_0050 // p_0050)
-    shares_2330 = int(budget_2330 // p_2330)
-
-    cost_0050 = round(shares_0050 * p_0050, 2)
-    cost_2330 = round(shares_2330 * p_2330, 2)
-
-    total_cost = round(cost_0050 + cost_2330, 2)
+    allocated_budget = budget * ratio
+    shares_2330 = int(allocated_budget // p_2330)
+    total_cost = round(shares_2330 * p_2330, 2)
     remaining_cash = round(budget - total_cost, 2)
 
     return {
@@ -239,21 +229,20 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
         "budget": budget,
         "mode": mode,
         "mode_title": mode_title,
-        "data_0050": {
-            "price": p_0050,
-            "ma20": data_0050["ma_20"],
-            "diff_pct": diff_0050,
-            "shares": shares_0050,
-            "cost": cost_0050,
-            "ratio": ratio_0050
-        },
         "data_2330": {
             "price": p_2330,
-            "ma20": data_2330["ma_20"],
+            "ma20": ma_2330,
             "diff_pct": diff_2330,
             "shares": shares_2330,
-            "cost": cost_2330,
-            "ratio": ratio_2330
+            "cost": total_cost,
+            "allocated_budget": round(allocated_budget, 2)
+        },
+        "market_context": {
+            "ticker": "0050.TW",
+            "name": "元大台灣50 (大盤指標)",
+            "price": m_price,
+            "diff_pct": m_diff,
+            "status_text": m_status
         },
         "total_cost": total_cost,
         "remaining_cash": remaining_cash

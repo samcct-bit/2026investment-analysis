@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2330 台積電 AI 智慧投資分析與大盤趨勢監控系統</title>
+    <title>2330 台積電 AI 智慧投資分析與零股加碼系統</title>
     <!-- Google Fonts & Chart.js -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,7 +19,7 @@
                 <div class="brand-icon">💎</div>
                 <div>
                     <h1>2330 台積電 AI 智慧投資分析助理</h1>
-                    <p class="subtitle">台積電加碼監控 | 20日均線防呆預警 | 對應大盤趨勢比對</p>
+                    <p class="subtitle">台積電零股加碼監控 | 20日均線防呆預警 | 對應大盤趨勢比對</p>
                 </div>
             </div>
             <div class="header-search">
@@ -78,35 +78,34 @@
                 </div>
             </section>
 
-            <!-- 3. 0050 ETF 與 2330 台積電 零股購買配重計算器面板 -->
+            <!-- 3. 台積電 2330 零股購買加碼試算面板 (獨家專注台積電零股) -->
             <section class="panel allocation-panel glass">
                 <div class="panel-header">
-                    <h3>⚖️ 台積電 (2330) 與大盤 (0050) 零股加碼配重試算</h3>
-                    <span class="badge highlight-badge">零股最佳化計算器</span>
+                    <h3>💎 台積電 (2330) 零股加碼與預算試算</h3>
+                    <span class="badge highlight-badge">台積電零股專屬計算器</span>
                 </div>
 
                 <div class="calc-control-row">
                     <div class="calc-field">
-                        <label for="budgetInput">💡 擬投入總預算 (NTD)</label>
+                        <label for="budgetInput">💡 擬投入預備金總額 (NTD)</label>
                         <input type="number" id="budgetInput" value="30000" min="1000" step="1000">
                     </div>
                     <div class="calc-field">
-                        <label for="modeSelect">🎯 策略調配模式</label>
+                        <label for="modeSelect">🎯 加碼分批策略</label>
                         <select id="modeSelect">
-                            <option value="dynamic" selected>🤖 均線乖離動態調配 (依折價自動權重)</option>
-                            <option value="safe">🛡️ 穩健大盤型 (0050: 70% | 2330: 30%)</option>
-                            <option value="balanced">⚖️ 均衡配置型 (0050: 50% | 2330: 50%)</option>
-                            <option value="growth">🚀 強攻積情型 (0050: 30% | 2330: 70%)</option>
+                            <option value="single" selected>🚀 單次即刻加碼 (100% 預算現價進場)</option>
+                            <option value="tranche2">⚖️ 二階段分批 (首批 50% 現價進場，50% 預留防守)</option>
+                            <option value="tranche3">🛡️ 三階段鐵板分批 (首批 33% 現價進場，67% 預留防守)</option>
                         </select>
                     </div>
                     <div class="calc-field btn-field">
-                        <button id="calcBtn">計算最佳零股股數</button>
+                        <button id="calcBtn">計算可買台積電零股股數</button>
                     </div>
                 </div>
 
                 <!-- 零股試算結果卡片展示區 -->
                 <div class="calc-results-grid" id="calcResultsBox">
-                    <div class="loading-spinner">計算 2330 與大盤最佳零股分配中...</div>
+                    <div class="loading-spinner">計算台積電零股最佳股數中...</div>
                 </div>
             </section>
 
@@ -119,7 +118,7 @@
                     <div class="step-box">
                         <span class="step-num">1</span>
                         <h4>建立 Google 試算表</h4>
-                        <p>A2 填寫 <code>TPE:2330</code>，A3 填寫 <code>TPE:0050</code>。設定最新股價與 20MA 計算公式。</p>
+                        <p>A2 填寫 <code>TPE:2330</code>，A3 填寫 <code>TPE:0050</code>（大盤對照）。設定最新股價與 20MA 計算公式。</p>
                     </div>
                     <div class="step-box">
                         <span class="step-num">2</span>
