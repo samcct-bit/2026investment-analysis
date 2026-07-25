@@ -141,21 +141,66 @@
                     <h3>🛠️ GAS 自動提醒設定說明（僅在台股開盤日執行）</h3>
                 </div>
                 <div class="gas-instructions">
-                    <div class="step-box">
+                    <div class="step-box step-box-wide">
                         <span class="step-num">1</span>
                         <h4>建立 Google 試算表</h4>
-                        <p>A2 填 <code>TPE:2330</code>，A3 填 <code>TPE:0050</code>。<br>
-                        B 欄設 GOOGLEFINANCE 現價，C 欄設 20MA 公式，<strong>F1 填入預備金預算（如 30000）</strong>。</p>
+                        <p style="margin-bottom: 10px;">依照以下欄位配置您的試算表，讓 GAS 能自動讀取台積電與大盤資料：</p>
+                        <table class="gas-table">
+                            <thead>
+                                <tr><th>儲存格</th><th>內容</th><th>公式範例</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>A2</code></td><td>台積電代碼</td><td><code>TPE:2330</code></td></tr>
+                                <tr><td><code>B2</code></td><td>台積電現價</td><td><code>=GOOGLEFINANCE(A2,"price")</code></td></tr>
+                                <tr><td><code>C2</code></td><td>20日月線</td><td><code>=AVERAGE(GOOGLEFINANCE(A2,"close",TODAY()-30,TODAY(),"DAILY"))</code></td></tr>
+                                <tr class="row-highlight"><td><code>D2</code></td><td>50日季線 ★新增</td><td><code>=AVERAGE(GOOGLEFINANCE(A2,"close",TODAY()-75,TODAY(),"DAILY"))</code></td></tr>
+                                <tr><td><code>E2</code></td><td>最後通知日（自動寫入）</td><td>留空，GAS 執行後自動填入</td></tr>
+                                <tr class="row-highlight"><td><code>F1</code></td><td>預備金預算 ★可自訂</td><td><code>30000</code>（直接填入數字，GAS 自動讀取）</td></tr>
+                                <tr><td><code>A3</code></td><td>大盤代碼</td><td><code>TPE:0050</code></td></tr>
+                                <tr><td><code>B3</code></td><td>大盤現價</td><td><code>=GOOGLEFINANCE(A3,"price")</code></td></tr>
+                                <tr><td><code>C3</code></td><td>大盤 20MA</td><td><code>=AVERAGE(GOOGLEFINANCE(A3,"close",TODAY()-30,TODAY(),"DAILY"))</code></td></tr>
+                                <tr><td><code>D3</code></td><td>大盤趨勢狀態</td><td><code>=IF(B3&lt;C3,"大盤走弱","大盤偏多")</code></td></tr>
+                            </tbody>
+                        </table>
                     </div>
+
                     <div class="step-box">
                         <span class="step-num">2</span>
-                        <h4>部署開盤日過濾腳本</h4>
-                        <p>複製 <code>gas/Code.gs</code> 至 GAS 編輯器。<br>自動排除週末、春節、颱風假等休市日。</p>
+                        <h4>部署開盤日過濾腳本（v2.0）</h4>
+                        <p>將本專案 <code>gas/Code.gs</code> 的程式碼複製至 Google Apps Script 編輯器並儲存。</p>
+                        <div class="gas-features">
+                            <div class="gas-feature-item">✅ 自動排除週末（週六、週日）</div>
+                            <div class="gas-feature-item">✅ 比對 Yahoo Finance 最新交易日，自動排除春節、颱風假等休市日</div>
+                            <div class="gas-feature-item">✅ 三燈號複合訊號（🟢月線 + 🔵季線 + 📊RSI）</div>
+                            <div class="gas-feature-item">✅ 預備金從 <strong>F1 儲存格</strong>讀取，修改預算不需改程式碼</div>
+                            <div class="gas-feature-item">✅ 已修正台北時區跨日 Bug（v2.0 新增）</div>
+                            <div class="gas-feature-item">✅ 發信去重機制（當日只發送一次，寫回 E2）</div>
+                        </div>
                     </div>
+
                     <div class="step-box">
                         <span class="step-num">3</span>
-                        <h4>設定每日下午觸發器</h4>
-                        <p>設定每日 <strong>13:30~14:00</strong> 自動執行 <code>checkMarketAndNotify</code>，收盤後即收到三燈號提醒 Email 與日曆事件。</p>
+                        <h4>設定每日觸發器</h4>
+                        <p>在 GAS 編輯器左欄點選「觸發條件」，新增時間型觸發器：</p>
+                        <div class="gas-trigger-info">
+                            <div class="trigger-item">
+                                <span class="trigger-label">執行函數</span>
+                                <code>checkMarketAndNotify</code>
+                            </div>
+                            <div class="trigger-item">
+                                <span class="trigger-label">觸發時間</span>
+                                <strong class="trigger-time">每日 13:30 ～ 14:00</strong>
+                                <span class="trigger-note">（台股收盤後立即執行）</span>
+                            </div>
+                            <div class="trigger-item">
+                                <span class="trigger-label">通知內容</span>
+                                <span>三燈號 Email（含零股試算）+ Google 日曆 13:30 收盤提醒事件</span>
+                            </div>
+                            <div class="trigger-item">
+                                <span class="trigger-label">手動測試</span>
+                                <span>執行 <code>testCalendarAndEmail</code> 函數，驗證 Email 與日曆整合是否正常</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

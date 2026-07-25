@@ -496,15 +496,20 @@ body {
 ───────────────────────────────────────────────────────────────── */
 .gas-instructions {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 16px;
 }
 
 .step-box {
     background: rgba(15,23,42,0.4);
-    padding: 16px;
+    padding: 18px;
     border-radius: 12px;
     border: 1px solid var(--card-border);
+}
+
+/* 步驟 1：試算表說明佔整行 */
+.step-box-wide {
+    grid-column: 1 / -1;
 }
 
 .step-num {
@@ -521,8 +526,100 @@ body {
     margin-bottom: 10px;
 }
 
-.step-box h4 { font-size: 14px; margin-bottom: 6px; }
+.step-box h4 { font-size: 14px; margin-bottom: 8px; }
 .step-box p  { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+
+/* GAS 試算表欄位公式表格 */
+.gas-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+.gas-table thead tr {
+    border-bottom: 1px solid var(--card-border);
+}
+
+.gas-table th {
+    padding: 8px 10px;
+    text-align: left;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.gas-table td {
+    padding: 7px 10px;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: middle;
+}
+
+.gas-table tr:last-child td { border-bottom: none; }
+
+.gas-table .row-highlight td {
+    background: rgba(245,158,11,0.08);
+    border-left: 2px solid var(--warning);
+}
+
+/* GAS 功能清單 */
+.gas-features {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.gas-feature-item {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    padding: 4px 0;
+}
+
+/* GAS 觸發器資訊區塊 */
+.gas-trigger-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.trigger-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.trigger-item:last-child { border-bottom: none; }
+
+.trigger-label {
+    min-width: 72px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+}
+
+.trigger-time {
+    color: var(--success);
+    font-size: 14px;
+}
+
+.trigger-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
 
 code {
     background: rgba(0,0,0,0.3);
