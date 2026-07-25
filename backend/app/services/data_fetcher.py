@@ -44,7 +44,7 @@ def fetch_via_yahoo_api(symbol="0050.TW"):
         print(f"Yahoo HTTP API Fetch Error: {e}")
         return None
 
-def get_stock_analysis(ticker_symbol="0050.TW", period="60d"):
+def get_stock_analysis(ticker_symbol="2330.TW", period="60d"):
     """
     抓取股票數據並計算 20MA, 50MA, RSI, 布林通道
     """

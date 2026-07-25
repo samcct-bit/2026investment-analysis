@@ -5,18 +5,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const tickerInput = document.getElementById("tickerInput");
     const calcBtn = document.getElementById("calcBtn");
 
-    // 初始載入 0050.TW 數據與零股試算
-    loadStockData("0050.TW");
+    // 預設載入台積電 2330.TW 數據與大盤趨勢
+    loadStockData("2330.TW");
     loadAllocationAdvice();
 
     searchBtn.addEventListener("click", () => {
-        const ticker = tickerInput.value.trim() || "0050.TW";
+        const ticker = tickerInput.value.trim() || "2330.TW";
         loadStockData(ticker);
     });
 
     tickerInput.addEventListener("keyup", (e) => {
         if (e.key === "Enter") {
-            const ticker = tickerInput.value.trim() || "0050.TW";
+            const ticker = tickerInput.value.trim() || "2330.TW";
             loadStockData(ticker);
         }
     });
@@ -31,6 +31,7 @@ async function loadStockData(ticker) {
     aiReportBox.innerHTML = '<div class="loading-spinner">載入數據與 AI 評估報告中...</div>';
 
     try {
+        // 1. 抓取主要查詢標的 (例如台積電)
         const response = await fetch(`/api/stock/${encodeURIComponent(ticker)}`);
         const resData = await response.json();
 
@@ -42,7 +43,19 @@ async function loadStockData(ticker) {
         const data = resData.data;
         const aiReport = resData.ai_report;
 
-        // 更新 UI 數據卡片
+        // 2. 抓取大盤趨勢指標 (預設 0050.TW) 作為大盤對照
+        const mResponse = await fetch(`/api/stock/0050.TW`);
+        const mResData = await mResponse.json();
+        
+        let marketText = "--";
+        if (mResData.success) {
+            const mData = mResData.data;
+            marketText = `${mData.status_text.replace("⚠️ ", "").replace("🟢 ", "")} (${mData.diff_20_pct}%)`;
+            const actionHint = document.getElementById("actionHint");
+            actionHint.innerHTML = `📊 大盤(0050)收盤：$${mData.current_price} 元 | 20MA 乖離: ${mData.diff_20_pct}%`;
+        }
+
+        // 更新 UI 數據卡片 (主要標的: 台積電)
         document.getElementById("currentPrice").innerText = `$${data.current_price}`;
         document.getElementById("latestDate").innerText = `最後更新: ${data.latest_date}`;
         document.getElementById("ma20Price").innerText = `$${data.ma_20}`;
@@ -61,7 +74,7 @@ async function loadStockData(ticker) {
         // 更新狀態卡片
         const statusTextElem = document.getElementById("statusText");
         const statusCard = document.getElementById("statusCard");
-        statusTextElem.innerText = data.status_text;
+        statusTextElem.innerText = `${data.status_text}`;
 
         if (data.is_drop_below_ma20) {
             statusCard.style.background = "rgba(239, 68, 68, 0.15)";
@@ -77,7 +90,12 @@ async function loadStockData(ticker) {
         document.getElementById("chartBadge").innerText = `${data.name} (${data.ticker})`;
 
         // 渲染 AI 報告
-        aiReportBox.innerHTML = aiReport.report_html;
+        aiReportBox.innerHTML = `
+            <div class="market-trend-context" style="margin-bottom: 15px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 3px solid #60a5fa; font-size: 14px;">
+                📢 <strong>大盤趨勢比對</strong>：當前大盤呈現 <strong>${marketText}</strong>。
+            </div>
+            ${aiReport.report_html}
+        `;
 
         // 繪製 Chart.js
         renderChart(data.history);
@@ -93,7 +111,7 @@ async function loadAllocationAdvice() {
     const budget = document.getElementById("budgetInput").value || 30000;
     const mode = document.getElementById("modeSelect").value || "dynamic";
 
-    calcResultsBox.innerHTML = '<div class="loading-spinner">試算 0050 與 2330 零股配重中...</div>';
+    calcResultsBox.innerHTML = '<div class="loading-spinner">試算 2330 台積電加碼配置中...</div>';
 
     try {
         const response = await fetch(`/api/allocation?budget=${budget}&mode=${mode}`);
@@ -104,29 +122,29 @@ async function loadAllocationAdvice() {
             return;
         }
 
-        const d0 = resData.data_0050;
         const d2 = resData.data_2330;
+        const d0 = resData.data_0050;
 
         calcResultsBox.innerHTML = `
-            <div class="stock-alloc-card">
-                <h4>📊 0050 (元大台灣50) <span>配重 ${intPct(d0.ratio)}%</span></h4>
-                <p>目前股價：<strong>$${d0.price}</strong> | 20MA 乖離：<span style="color:${d0.diff_pct < 0 ? '#ef4444':'#10b981'}">${d0.diff_pct}%</span></p>
-                <div class="share-count">建議購買：${d0.shares} 股</div>
-                <p>預估花費金額：<strong>$${formatNum(d0.cost)}</strong> 元</p>
+            <div class="stock-alloc-card" style="border-left: 4px solid #059669;">
+                <h4>💎 2330 (台積電) 零股配重</h4>
+                <p>當前股價：<strong>$${d2.price}</strong> | 20MA 乖離：<span style="color:${d2.diff_pct < 0 ? '#ef4444':'#10b981'}">${d2.diff_pct}%</span></p>
+                <div class="share-count" style="color: #059669;">建議購買：${d2.shares} 股</div>
+                <p>配重預算：<strong>$${formatNum(d2.cost)}</strong> 元 (${intPct(d2.ratio)}%)</p>
             </div>
 
             <div class="stock-alloc-card">
-                <h4>💎 2330 (台積電) <span>配重 ${intPct(d2.ratio)}%</span></h4>
-                <p>目前股價：<strong>$${d2.price}</strong> | 20MA 乖離：<span style="color:${d2.diff_pct < 0 ? '#ef4444':'#10b981'}">${d2.diff_pct}%</span></p>
-                <div class="share-count">建議購買：${d2.shares} 股</div>
-                <p>預估花費金額：<strong>$${formatNum(d2.cost)}</strong> 元</p>
+                <h4>📊 大盤 0050 輔助配置</h4>
+                <p>當前股價：<strong>$${d0.price}</strong> | 20MA 乖離：<span style="color:${d0.diff_pct < 0 ? '#ef4444':'#10b981'}">${d0.diff_pct}%</span></p>
+                <div class="share-count" style="color: #94a3b8;">建議購買：${d0.shares} 股</div>
+                <p>配重預算：<strong>$${formatNum(d0.cost)}</strong> 元 (${intPct(d0.ratio)}%)</p>
             </div>
 
             <div class="stock-alloc-card" style="border-left: 4px solid #f59e0b;">
-                <h4>💡 試算總結與資金建議</h4>
-                <p><strong>{resData.mode_title}</strong></p>
+                <h4>💡 2330 + 大盤配重總結</h4>
+                <p style="font-size: 13px; color: #94a3b8;">${resData.mode_title}</p>
                 <p style="margin: 8px 0;">總花費：<strong style="color: #60a5fa;">$${formatNum(resData.total_cost)}</strong> 元</p>
-                <p>剩餘預備現金：<strong>$${formatNum(resData.remaining_cash)}</strong> 元</p>
+                <p>剩餘預備金現金：<strong>$${formatNum(resData.remaining_cash)}</strong> 元</p>
             </div>
         `;
 

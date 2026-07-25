@@ -174,7 +174,7 @@ def generate_ai_report(stock_data):
 
 @app.get("/api/stock/{ticker}")
 @app.get("/stock/{ticker}")
-def read_stock_data(ticker: str = "0050.TW"):
+def read_stock_data(ticker: str = "2330.TW"):
     data = get_stock_analysis(ticker)
     if not data:
         return JSONResponse(status_code=404, content={"success": False, "message": f"無法獲取標的 {ticker} 之數據"})

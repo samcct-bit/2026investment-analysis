@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>0050 & 2330 台積電 AI 智慧投資分析與零股配重系統</title>
+    <title>2330 台積電 AI 智慧投資分析與大盤趨勢監控系統</title>
     <!-- Google Fonts & Chart.js -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,14 +16,14 @@
         <!-- 頂部 Header -->
         <header class="app-header">
             <div class="header-brand">
-                <div class="brand-icon">📈</div>
+                <div class="brand-icon">💎</div>
                 <div>
-                    <h1>0050 & 2330 AI 智慧投資分析助理</h1>
-                    <p class="subtitle">動態加碼監控 | 20日均線防呆預警 | 0050與台積電零股試算</p>
+                    <h1>2330 台積電 AI 智慧投資分析助理</h1>
+                    <p class="subtitle">台積電加碼監控 | 20日均線防呆預警 | 對應大盤趨勢比對</p>
                 </div>
             </div>
             <div class="header-search">
-                <input type="text" id="tickerInput" value="0050.TW" placeholder="輸入股票代碼 (例: 0050.TW, 2330.TW)">
+                <input type="text" id="tickerInput" value="2330.TW" placeholder="輸入股票代碼 (例: 2330.TW, 0050.TW)">
                 <button id="searchBtn">查詢個股</button>
             </div>
         </header>
@@ -48,9 +48,9 @@
                     <span class="card-sub">14日週期</span>
                 </div>
                 <div class="metric-card glass highlight" id="statusCard">
-                    <span class="card-label">狀態診斷</span>
+                    <span class="card-label">台積電狀態診斷</span>
                     <div class="card-value status-text" id="statusText">讀取中...</div>
-                    <span class="card-sub" id="actionHint">自動防呆與單日紀錄</span>
+                    <span class="card-sub" id="actionHint">自動對應大盤趨勢分析</span>
                 </div>
             </section>
 
@@ -60,7 +60,7 @@
                 <div class="panel chart-panel glass">
                     <div class="panel-header">
                         <h3>📊 30 日歷史走勢與 20MA 均線</h3>
-                        <span class="badge" id="chartBadge">0050.TW</span>
+                        <span class="badge" id="chartBadge">2330.TW</span>
                     </div>
                     <div class="chart-container">
                         <canvas id="stockChart"></canvas>
@@ -70,7 +70,7 @@
                 <!-- 右欄：AI 智慧加碼策略報告 -->
                 <div class="panel ai-panel glass">
                     <div class="panel-header">
-                        <h3>🤖 AI 專家個股加碼報告</h3>
+                        <h3>🤖 AI 專家加碼與趨勢評估報告</h3>
                     </div>
                     <div class="ai-content" id="aiReportBox">
                         <div class="loading-spinner">載入最新 AI 評估報告中...</div>
@@ -78,10 +78,10 @@
                 </div>
             </section>
 
-            <!-- 3. 新增：0050 ETF 與 2330 台積電 零股購買配重計算器面板 -->
+            <!-- 3. 0050 ETF 與 2330 台積電 零股購買配重計算器面板 -->
             <section class="panel allocation-panel glass">
                 <div class="panel-header">
-                    <h3>⚖️ 0050 ETF 與 2330 (台積電) 零股配重與預算試算</h3>
+                    <h3>⚖️ 台積電 (2330) 與大盤 (0050) 零股加碼配重試算</h3>
                     <span class="badge highlight-badge">零股最佳化計算器</span>
                 </div>
 
@@ -106,30 +106,30 @@
 
                 <!-- 零股試算結果卡片展示區 -->
                 <div class="calc-results-grid" id="calcResultsBox">
-                    <div class="loading-spinner">計算 0050 與 2330 最佳零股分配中...</div>
+                    <div class="loading-spinner">計算 2330 與大盤最佳零股分配中...</div>
                 </div>
             </section>
 
             <!-- 4. GAS 設定說明區塊 -->
             <section class="panel info-panel glass">
                 <div class="panel-header">
-                    <h3>🛠️ Google Apps Script (GAS) 自動化發信設定說明</h3>
+                    <h3>🛠️ Google Apps Script (GAS) 僅在開盤日提醒設定說明</h3>
                 </div>
                 <div class="gas-instructions">
                     <div class="step-box">
                         <span class="step-num">1</span>
                         <h4>建立 Google 試算表</h4>
-                        <p>A2 填寫 <code>TPE:0050</code>，B2 填寫 <code>=GOOGLEFINANCE(A2, "price")</code></p>
+                        <p>A2 填寫 <code>TPE:2330</code>，A3 填寫 <code>TPE:0050</code>。設定最新股價與 20MA 計算公式。</p>
                     </div>
                     <div class="step-box">
                         <span class="step-num">2</span>
-                        <h4>部署 Apps Script</h4>
-                        <p>複製本專案 <code>gas/Code.gs</code> 程式碼至擴充功能編輯器中並儲存。</p>
+                        <h4>部署開盤日過濾腳本</h4>
+                        <p>複製本專案 <code>gas/Code.gs</code> 程式碼至編輯器。自動排除週末、春節、颱風假等休市日。</p>
                     </div>
                     <div class="step-box">
                         <span class="step-num">3</span>
                         <h4>設定日計時器</h4>
-                        <p>設定每日下午 1:00-2:00 自動執行 <code>check0050AndNotify</code>。</p>
+                        <p>設定每日下午 1:00-2:00 自動執行 <code>checkMarketAndNotify</code>。</p>
                     </div>
                 </div>
             </section>

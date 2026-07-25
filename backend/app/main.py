@@ -8,7 +8,7 @@ from app.services.ai_agent import generate_ai_investment_report
 app = FastAPI(title="0050 & 2330 AI Investment Analysis API", version="1.1.0")
 
 @app.get("/api/stock/{ticker}")
-def read_stock_data(ticker: str = "0050.TW"):
+def read_stock_data(ticker: str = "2330.TW"):
     ticker_clean = ticker.upper()
     if not ticker_clean.endswith(".TW") and ticker_clean.isdigit():
         ticker_clean += ".TW"
