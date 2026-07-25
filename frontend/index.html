@@ -3,88 +3,113 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2330 台積電 AI 智慧投資分析與零股加碼系統</title>
-    <!-- Google Fonts & Chart.js -->
+    <meta name="description" content="台積電 2330 AI 智慧投資分析儀表板：三燈號複合訊號、月線季線監控、RSI 超賣判斷、零股加碼試算">
+    <title>2330 台積電 AI 智慧投資分析 — 零股加碼系統</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 鎖定 Chart.js 版本，避免大版本破壞性更新 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
     <div class="app-container">
+
         <!-- 頂部 Header -->
         <header class="app-header">
             <div class="header-brand">
                 <div class="brand-icon">💎</div>
-                <div>
-                    <h1>2330 台積電 AI 智慧投資分析助理</h1>
-                    <p class="subtitle">台積電零股加碼監控 | 20日均線防呆預警 | 對應大盤趨勢比對</p>
+                <div class="brand-text">
+                    <h1>台積電 2330 AI 智慧投資分析助理</h1>
+                    <p class="subtitle">三燈號複合訊號 | 月線季線雙確認 | RSI 超賣偵測 | 零股加碼試算</p>
                 </div>
             </div>
             <div class="header-search">
-                <input type="text" id="tickerInput" value="2330.TW" placeholder="輸入股票代碼 (例: 2330.TW, 0050.TW)">
+                <input type="text" id="tickerInput" value="2330.TW"
+                       placeholder="股票代碼 (如 2330.TW)">
                 <button id="searchBtn">查詢個股</button>
             </div>
         </header>
 
-        <!-- 主要內容區域 -->
+        <!-- 主內容 -->
         <main class="dashboard-grid">
-            <!-- 1. 核心數據指標卡片區 -->
+
+            <!-- 1. 核心指標卡片列 (5 張) -->
             <section class="metrics-row">
                 <div class="metric-card glass">
                     <span class="card-label">目前股價</span>
                     <div class="card-value" id="currentPrice">--</div>
-                    <span class="card-sub" id="latestDate">--</span>
+                    <span class="card-sub" id="latestDate">最後更新: --</span>
                 </div>
                 <div class="metric-card glass">
-                    <span class="card-label">20 日月線 (20MA)</span>
+                    <span class="card-label">20MA 月線</span>
                     <div class="card-value" id="ma20Price">--</div>
-                    <span class="card-sub" id="diff20">--</span>
+                    <span class="card-sub" id="diff20">月線乖離 --</span>
                 </div>
                 <div class="metric-card glass">
-                    <span class="card-label">相對強弱指標 (RSI)</span>
-                    <div class="card-value" id="rsiValue">--</div>
-                    <span class="card-sub">14日週期</span>
+                    <span class="card-label">50MA 季線</span>
+                    <div class="card-value" id="ma50Price">--</div>
+                    <span class="card-sub" id="diff50">季線乖離 --</span>
                 </div>
-                <div class="metric-card glass highlight" id="statusCard">
-                    <span class="card-label">台積電狀態診斷</span>
-                    <div class="card-value status-text" id="statusText">讀取中...</div>
+                <div class="metric-card glass">
+                    <span class="card-label">RSI-14（Wilder）</span>
+                    <div class="card-value" id="rsiValue">--</div>
+                    <span class="card-sub" id="rsiLabel">14日 Wilder 標準計算</span>
+                </div>
+                <div class="metric-card glass" id="statusCard">
+                    <span class="card-label">三燈號複合訊號</span>
+                    <div class="signal-light-row">
+                        <span id="signalLight" style="font-size: 28px;">⏳</span>
+                        <div class="card-value status-text" id="statusText">讀取中...</div>
+                    </div>
                     <span class="card-sub" id="actionHint">自動對應大盤趨勢分析</span>
                 </div>
             </section>
 
-            <!-- 2. 圖表與 AI 診斷雙欄 -->
+            <!-- 2. 圖表 + AI 報告雙欄 -->
             <section class="main-content-row">
-                <!-- 左欄：互動 K 線/走勢與均線圖表 -->
+                <!-- 左欄：三層圖表（價格 + 成交量 + RSI） -->
                 <div class="panel chart-panel glass">
                     <div class="panel-header">
-                        <h3>📊 30 日歷史走勢與 20MA 均線</h3>
+                        <h3>📊 歷史走勢 / 均線 / 成交量 / RSI</h3>
                         <span class="badge" id="chartBadge">2330.TW</span>
                     </div>
-                    <div class="chart-container">
+                    <!-- 主圖：收盤價 + 20MA + 50MA + 布林通道 -->
+                    <div class="chart-container" style="height: 260px;">
                         <canvas id="stockChart"></canvas>
+                    </div>
+                    <!-- 成交量子圖 -->
+                    <div class="chart-sublabel">📦 成交量</div>
+                    <div class="chart-container" style="height: 65px;">
+                        <canvas id="volumeChart"></canvas>
+                    </div>
+                    <!-- RSI 子圖 -->
+                    <div class="chart-sublabel">📈 RSI-14 <span class="rsi-legend"><span style="color:#ef4444">■</span> 30 超賣  <span style="color:#f59e0b">■</span> 70 超買</span></div>
+                    <div class="chart-container" style="height: 80px;">
+                        <canvas id="rsiChart"></canvas>
                     </div>
                 </div>
 
-                <!-- 右欄：AI 智慧加碼策略報告 -->
+                <!-- 右欄：AI 智慧報告 -->
                 <div class="panel ai-panel glass">
                     <div class="panel-header">
-                        <h3>🤖 AI 專家加碼與趨勢評估報告</h3>
+                        <h3>🤖 AI 加碼策略 & 乖離率分層建議</h3>
                     </div>
                     <div class="ai-content" id="aiReportBox">
-                        <div class="loading-spinner">載入最新 AI 評估報告中...</div>
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <span>載入 AI 評估報告中...</span>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- 3. 台積電 2330 零股購買加碼試算面板 (獨家專注台積電零股) -->
+            <!-- 3. 台積電零股加碼試算 -->
             <section class="panel allocation-panel glass">
                 <div class="panel-header">
                     <h3>💎 台積電 (2330) 零股加碼與預算試算</h3>
                     <span class="badge highlight-badge">台積電零股專屬計算器</span>
                 </div>
-
                 <div class="calc-control-row">
                     <div class="calc-field">
                         <label for="budgetInput">💡 擬投入預備金總額 (NTD)</label>
@@ -93,45 +118,48 @@
                     <div class="calc-field">
                         <label for="modeSelect">🎯 加碼分批策略</label>
                         <select id="modeSelect">
-                            <option value="single" selected>🚀 單次即刻加碼 (100% 預算現價進場)</option>
-                            <option value="tranche2">⚖️ 二階段分批 (首批 50% 現價進場，50% 預留防守)</option>
-                            <option value="tranche3">🛡️ 三階段鐵板分批 (首批 33% 現價進場，67% 預留防守)</option>
+                            <option value="single" selected>🚀 單次即刻加碼（100% 現價進場）</option>
+                            <option value="tranche2">⚖️ 二階段分批（首批 50% 進場，50% 預留）</option>
+                            <option value="tranche3">🛡️ 三階段鐵板（首批 33% 進場，67% 預留）</option>
                         </select>
                     </div>
                     <div class="calc-field btn-field">
                         <button id="calcBtn">計算可買台積電零股股數</button>
                     </div>
                 </div>
-
-                <!-- 零股試算結果卡片展示區 -->
                 <div class="calc-results-grid" id="calcResultsBox">
-                    <div class="loading-spinner">計算台積電零股最佳股數中...</div>
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>計算台積電零股最佳股數中...</span>
+                    </div>
                 </div>
             </section>
 
-            <!-- 4. GAS 設定說明區塊 -->
+            <!-- 4. GAS 設定說明 -->
             <section class="panel info-panel glass">
                 <div class="panel-header">
-                    <h3>🛠️ Google Apps Script (GAS) 僅在開盤日提醒設定說明</h3>
+                    <h3>🛠️ GAS 自動提醒設定說明（僅在台股開盤日執行）</h3>
                 </div>
                 <div class="gas-instructions">
                     <div class="step-box">
                         <span class="step-num">1</span>
                         <h4>建立 Google 試算表</h4>
-                        <p>A2 填寫 <code>TPE:2330</code>，A3 填寫 <code>TPE:0050</code>（大盤對照）。設定最新股價與 20MA 計算公式。</p>
+                        <p>A2 填 <code>TPE:2330</code>，A3 填 <code>TPE:0050</code>。<br>
+                        B 欄設 GOOGLEFINANCE 現價，C 欄設 20MA 公式，<strong>F1 填入預備金預算（如 30000）</strong>。</p>
                     </div>
                     <div class="step-box">
                         <span class="step-num">2</span>
                         <h4>部署開盤日過濾腳本</h4>
-                        <p>複製本專案 <code>gas/Code.gs</code> 程式碼至編輯器。自動排除週末、春節、颱風假等休市日。</p>
+                        <p>複製 <code>gas/Code.gs</code> 至 GAS 編輯器。<br>自動排除週末、春節、颱風假等休市日。</p>
                     </div>
                     <div class="step-box">
                         <span class="step-num">3</span>
-                        <h4>設定日計時器</h4>
-                        <p>設定每日下午 1:00-2:00 自動執行 <code>checkMarketAndNotify</code>。</p>
+                        <h4>設定每日下午觸發器</h4>
+                        <p>設定每日 <strong>13:30~14:00</strong> 自動執行 <code>checkMarketAndNotify</code>，收盤後即收到三燈號提醒 Email 與日曆事件。</p>
                     </div>
                 </div>
             </section>
+
         </main>
     </div>
 
