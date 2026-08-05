@@ -1,19 +1,13 @@
 /**
  * ====================================================================
- * 2330 台積電智慧投資分析與大盤趨勢自動提醒系統 (GAS v3.0)
+ * 2330 & 0050 雙標的智慧投資分析與大盤趨勢自動提醒系統 (GAS v4.0)
  * ====================================================================
- * 本次修復（V3.0 盤中即時通知）：
- * 1. 支援盤中 (09:00~13:45) 每小時/半小時巡邏。
- * 2. 導入「階梯式紀錄」，E2 格式改為 `YYYY-MM-DD|MaxScore`，
- *    避免同一天內被同樣的評分轟炸，但若評分突破新級距則會發送緊急通知。
- * 3. 日曆事件改為偵測當下的即時提醒，讓手機立刻收到推播。
+ * 本次修復（V4.0 雙軌 50/50 資金配重）：
+ * 1. 支援同時分析 2330 與 0050，各佔預計投入預備金的 50%。
+ * 2. 只有評分 >= 40 且符合發送信件條件的標的，才會給予買進建議。
  * ====================================================================
  */
 
-/**
- * 主入口：建議設定為每半小時或每小時自動觸發
- * 只在台灣股市開盤日的 09:00~13:45 執行
- */
 function checkMarketAndNotify() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const timeZone = "Asia/Taipei";
@@ -28,9 +22,6 @@ function checkMarketAndNotify() {
     Logger.log(`[${todayStr} ${hour}:${minute}] ℹ️ 目前非盤中時間 (09:00~13:45)，進入休眠。`);
     return;
   }
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const timeZone = "Asia/Taipei";
-  const todayStr = Utilities.formatDate(new Date(), timeZone, "yyyy-MM-dd");
 
   // ── 檢查台灣股市是否開盤 ──
   if (!isTaiwanMarketOpen(todayStr)) {
@@ -39,160 +30,171 @@ function checkMarketAndNotify() {
   }
 
   // ── 讀取試算表數據 ──
-  // 列 2 (台積電 2330): A2: TPE:2330, B2: 現價, C2: 20MA, D2: 50MA, E2: 最後通知日
-  // 列 3 (大盤 0050):   A3: TPE:0050, B3: 現價, C3: 20MA
-  // F1: 預備金預算（使用者自訂，預設 30000）
   const p2330       = parseFloat(sheet.getRange("B2").getValue());
   const ma20_2330   = parseFloat(sheet.getRange("C2").getValue());
-  const ma50_2330   = parseFloat(sheet.getRange("D2").getValue()); // ★ 新增：季線
+  const ma50_2330   = parseFloat(sheet.getRange("D2").getValue()); 
+  
+  const p0050       = parseFloat(sheet.getRange("B3").getValue());
+  const ma20_0050   = parseFloat(sheet.getRange("C3").getValue());
+  const ma50_0050   = parseFloat(sheet.getRange("D3").getValue());
+
   const lastNotifiedStr = sheet.getRange("E2").getValue()
     ? sheet.getRange("E2").getValue().toString().trim() : "";
   
-  // 解析 E2 紀錄 (格式: YYYY-MM-DD|MaxScore)
   let notifiedDate = "";
-  let notifiedMaxScore = 0;
+  let notifiedMaxScore2330 = 0;
+  let notifiedMaxScore0050 = 0;
+  // 新紀錄格式: YYYY-MM-DD|Max2330|Max0050
   if (lastNotifiedStr.includes("|")) {
     const parts = lastNotifiedStr.split("|");
     notifiedDate = parts[0];
-    notifiedMaxScore = parseInt(parts[1]) || 0;
+    notifiedMaxScore2330 = parseInt(parts[1]) || 0;
+    notifiedMaxScore0050 = parseInt(parts[2]) || parseInt(parts[1]) || 0; // 相容舊版
   } else {
-    // 相容舊版 (只存日期)
     notifiedDate = lastNotifiedStr;
   }
 
-  const p0050     = parseFloat(sheet.getRange("B3").getValue());
-  const ma20_0050 = parseFloat(sheet.getRange("C3").getValue());
-  const status0050 = sheet.getRange("D3").getValue();
-
-  // ★ 修復：從 F1 讀取預算（使用者可自行修改試算表，不須改程式碼）
   const budgetCell = sheet.getRange("F1").getValue();
   const budget = (budgetCell && !isNaN(parseFloat(budgetCell)))
     ? parseFloat(budgetCell) : 30000;
 
-  // ── 防呆：確保數據有效 ──
   if (isNaN(p2330) || isNaN(ma20_2330) || isNaN(p0050) || isNaN(ma20_0050)) {
-    Logger.log(`[${todayStr}] ⚠️ 股價數據異常，暫停本次執行。(2330: ${p2330}, 20MA: ${ma20_2330})`);
+    Logger.log(`[${todayStr}] ⚠️ 股價數據異常，暫停本次執行。`);
     return;
   }
 
-  // ── 計算乖離率 ──
-  const diff2330_pct = (((p2330 - ma20_2330) / ma20_2330) * 100).toFixed(2);
-  const diff0050_pct = (((p0050 - ma20_0050) / ma20_0050) * 100).toFixed(2);
-  const below20 = p2330 < ma20_2330;
-  const below50 = !isNaN(ma50_2330) && p2330 < ma50_2330;
+  // ── 評分系統函數 ──
+  function calcScore(price, ma20, ma50) {
+    const diff20_pct = (((price - ma20) / ma20) * 100);
+    const diff50_pct = ma50 ? (((price - ma50) / ma50) * 100) : 0;
+    
+    let score = 15; // RSI 基本分
+    if (diff20_pct <= -18) score += 50;
+    else if (diff20_pct <= -12) score += 45;
+    else if (diff20_pct <= -7) score += 37;
+    else if (diff20_pct <= -3) score += 25;
+    else if (diff20_pct <= 0) score += 12;
 
-  // ── 評分系統（GAS 版，不含 RSI） ──
-  let score = 0;
-  
-  // 月線乖離得分 (0-50)
-  if (diff2330_pct <= -18) score += 50;
-  else if (diff2330_pct <= -12) score += 45;
-  else if (diff2330_pct <= -7) score += 37;
-  else if (diff2330_pct <= -3) score += 25;
-  else if (diff2330_pct <= 0) score += 12;
-  
-  // 季線位置得分 (0-20)
-  if (diff0050_pct <= -10) score += 20;
-  else if (diff0050_pct <= -5) score += 15;
-  else if (diff0050_pct <= 0) score += 10;
-
-  // 加上預設 RSI 基本分 15 分
-  score += 15;
-  
-  let signalEmoji, signalText, levelClass;
-  if (score <= 20) {
-      signalEmoji = "⏸️"; signalText = "定期定額區 (維持月定投)"; levelClass = "#3b82f6";
-  } else if (score <= 40) {
-      signalEmoji = "⚡"; signalText = "輕度加碼機會 (動用預備金 15%)"; levelClass = "#06b6d4";
-  } else if (score <= 60) {
-      signalEmoji = "🟢"; signalText = "良好加碼機會 (動用預備金 33%)"; levelClass = "#10b981";
-  } else if (score <= 80) {
-      signalEmoji = "💪"; signalText = "強力加碼機會 (動用預備金 60%)"; levelClass = "#f59e0b";
-  } else {
-      signalEmoji = "🔥"; signalText = "歷史性買點 (動用預備金 85%)"; levelClass = "#ef4444";
+    if (diff50_pct <= -10) score += 20;
+    else if (diff50_pct <= -5) score += 15;
+    else if (diff50_pct <= 0) score += 10;
+    return { score, diff20_pct: diff20_pct.toFixed(2), diff50_pct: diff50_pct.toFixed(2) };
   }
 
-  Logger.log(`[${todayStr}] 台積電: ${p2330} (20MA: ${ma20_2330}, 乖離: ${diff2330_pct}%) ${signalEmoji} ${signalText}`);
-  Logger.log(`[${todayStr}] 大盤(0050): ${p0050} (20MA: ${ma20_0050})`);
+  const res2330 = calcScore(p2330, ma20_2330, ma50_2330);
+  const res0050 = calcScore(p0050, ma20_0050, ma50_0050);
+  const score2330 = res2330.score;
+  const score0050 = res0050.score;
 
-  // ── 智慧防擾機制：只有在評分 >= 40 且 (今日未發信 或 評分突破新級別) 時，才觸發通知 ──
-  let shouldNotify = false;
-  if (score >= 40) {
-    if (notifiedDate !== todayStr) {
-      shouldNotify = true; // 今天還沒發過
-    } else if (score > notifiedMaxScore && getScoreTier(score) > getScoreTier(notifiedMaxScore)) {
-      shouldNotify = true; // 雖然發過，但崩得更深，突破新級別！
+  function getSignal(score) {
+    if (score <= 20) return { emoji: "⏸️", text: "定期定額區 (維持月定投)" };
+    if (score <= 40) return { emoji: "⚡", text: "輕度加碼機會 (動用預備金 15%)" };
+    if (score <= 60) return { emoji: "🟢", text: "良好加碼機會 (動用預備金 33%)" };
+    if (score <= 80) return { emoji: "💪", text: "強力加碼機會 (動用預備金 60%)" };
+    return { emoji: "🔥", text: "歷史性買點 (動用預備金 85%)" };
+  }
+  
+  const sig2330 = getSignal(score2330);
+  const sig0050 = getSignal(score0050);
+
+  // ── 智慧防擾與通知判斷 ──
+  let buy2330 = false;
+  let buy0050 = false;
+
+  if (score2330 >= 40) {
+    if (notifiedDate !== todayStr || (score2330 > notifiedMaxScore2330 && getScoreTier(score2330) > getScoreTier(notifiedMaxScore2330))) {
+      buy2330 = true;
+    }
+  }
+  if (score0050 >= 40) {
+    if (notifiedDate !== todayStr || (score0050 > notifiedMaxScore0050 && getScoreTier(score0050) > getScoreTier(notifiedMaxScore0050))) {
+      buy0050 = true;
     }
   }
 
-  if (shouldNotify) {
+  if (buy2330 || buy0050) {
     const userEmail = Session.getActiveUser().getEmail();
+    const halfBudget = budget / 2;
+    
+    let shares2330 = 0, cost2330 = 0;
+    let shares0050 = 0, cost0050 = 0;
 
-    // 零股試算
-    const shares2330 = Math.floor(budget / p2330);
-    const totalCost  = shares2330 * p2330;
-    const remaining  = budget - totalCost;
+    if (buy2330) {
+      shares2330 = Math.floor(halfBudget / p2330);
+      cost2330 = shares2330 * p2330;
+    }
+    if (buy0050) {
+      shares0050 = Math.floor(halfBudget / p0050);
+      cost0050 = shares0050 * p0050;
+    }
+
+    const totalCost = cost2330 + cost0050;
+    const remaining = budget - totalCost;
 
     const timeStr = Utilities.formatDate(now, timeZone, "HH:mm");
-    const subject = `${signalEmoji}【盤中急跌加碼】2330 評分達 ${score} 分 (目前: $${p2330})`;
+    
+    let titleParts = [];
+    if (buy2330) titleParts.push(`2330買${shares2330}股`);
+    if (buy0050) titleParts.push(`0050買${shares0050}股`);
+    const subject = `【即時加碼】${titleParts.join(', ')}`;
 
-    const htmlMessage = `
-      <div style="font-family: Arial, 'Microsoft JhengHei', sans-serif; max-width: 620px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+    const htmlMessage = \`
+      <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
         <div style="background: linear-gradient(135deg, #1e3a8a, #059669); color: #ffffff; padding: 24px; text-align: center;">
-          <h2 style="margin: 0; font-size: 22px;">${signalEmoji} 2330 台積電加碼通知</h2>
-          <p style="margin: 6px 0 0; opacity: 0.9; font-size: 14px;">偵測日期：${todayStr}</p>
+          <h2 style="margin: 0; font-size: 22px;">⚡ 雙引擎加碼通知 (2330 & 0050)</h2>
+          <p style="margin: 6px 0 0; opacity: 0.9; font-size: 14px;">偵測日期：\${todayStr}</p>
         </div>
         <div style="padding: 24px; background-color: #ffffff; color: #1f2937;">
-          <p style="font-size: 15px;"><strong>加碼強度評分：${score} 分 | ${signalEmoji} ${signalText}</strong></p>
-
+          
           <div style="background-color: #f8fafc; border-left: 4px solid #059669; padding: 16px; border-radius: 6px; margin: 16px 0;">
             <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
               <tr style="border-bottom: 1px solid #e5e7eb; color: #6b7280;">
                 <th style="text-align: left; padding: 8px 0;">標的</th>
                 <th style="text-align: right; padding: 8px 0;">現價</th>
-                <th style="text-align: right; padding: 8px 0;">20MA</th>
-                <th style="text-align: right; padding: 8px 0;">50MA</th>
                 <th style="text-align: right; padding: 8px 0;">月線乖離</th>
+                <th style="text-align: right; padding: 8px 0;">評分</th>
+                <th style="text-align: right; padding: 8px 0;">狀態</th>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #1e3a8a;">💎 台積電 (2330)</td>
-                <td style="text-align: right; color: #dc2626; font-weight: bold;">$${p2330}</td>
-                <td style="text-align: right;">$${ma20_2330}</td>
-                <td style="text-align: right;">${!isNaN(ma50_2330) ? '$' + ma50_2330 : 'N/A'}</td>
-                <td style="text-align: right; color: #dc2626; font-weight: bold;">${diff2330_pct}%</td>
+                <td style="text-align: right; color: #dc2626; font-weight: bold;">$\${p2330}</td>
+                <td style="text-align: right; color: #dc2626; font-weight: bold;">\${res2330.diff20_pct}%</td>
+                <td style="text-align: right; font-weight: bold;">\${score2330}</td>
+                <td style="text-align: right;">\${sig2330.emoji}</td>
               </tr>
               <tr>
-                <td style="padding: 8px 0; color: #4b5563;">📊 大盤(0050)</td>
-                <td style="text-align: right;">$${p0050}</td>
-                <td style="text-align: right;">$${ma20_0050}</td>
-                <td style="text-align: right;">--</td>
-                <td style="text-align: right; color: ${p0050 < ma20_0050 ? '#dc2626' : '#059669'}">${diff0050_pct}%</td>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">📈 0050 大盤</td>
+                <td style="text-align: right; color: #dc2626; font-weight: bold;">$\${p0050}</td>
+                <td style="text-align: right; color: #dc2626; font-weight: bold;">\${res0050.diff20_pct}%</td>
+                <td style="text-align: right; font-weight: bold;">\${score0050}</td>
+                <td style="text-align: right;">\${sig0050.emoji}</td>
               </tr>
             </table>
           </div>
 
           <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px;">
-            <h4 style="margin: 0 0 10px; color: #166534; font-size: 15px;">💡 台積電零股購買試算（預算 $${budget.toLocaleString()} 元）</h4>
+            <h4 style="margin: 0 0 10px; color: #166534; font-size: 15px;">💡 50/50 資金配重零股試算（預算 $\${budget.toLocaleString()} 元）</h4>
             <ul style="margin: 0; padding-left: 20px; color: #14532d; font-size: 14px; line-height: 1.7;">
-              <li>建議買進股數：<strong>${shares2330} 股零股</strong></li>
-              <li>預估總花費：<strong>$${totalCost.toLocaleString()} 元</strong></li>
-              <li>剩餘預備金：<strong>$${remaining.toLocaleString()} 元</strong></li>
-              <li>加碼心法：評分越高代表安全邊際越高，請依建議資金比例分批進場，切忌一次 All-in。</li>
+              \${buy2330 ? \`<li>💎 2330 建議買進：<strong>\${shares2330} 股</strong> (花費 $\${cost2330.toLocaleString()})</li>\` : \`<li>💎 2330 評分不足 (\${score2330})，不動用其專屬 50% 預算</li>\`}
+              \${buy0050 ? \`<li>📈 0050 建議買進：<strong>\${shares0050} 股</strong> (花費 $\${cost0050.toLocaleString()})</li>\` : \`<li>📈 0050 評分不足 (\${score0050})，不動用其專屬 50% 預算</li>\`}
+              <li>預估總花費：<strong>$\${totalCost.toLocaleString()} 元</strong></li>
+              <li>剩餘預備金：<strong>$\${remaining.toLocaleString()} 元</strong></li>
             </ul>
           </div>
         </div>
         <div style="background-color: #f3f4f6; padding: 12px; text-align: center; color: #9ca3af; font-size: 12px;">
-          偵測時間：${todayStr} ${timeStr} | 已同步建立即時日曆提醒
+          偵測時間：\${todayStr} \${timeStr} | 已同步建立即時日曆提醒
         </div>
-      </div>`;
+      </div>\`;
 
     const plainMessage =
-      `台積電 (2330.TW) 加碼通知 [${todayStr}]\n` +
-      `加碼強度評分：${score} 分 | ${signalEmoji} ${signalText}\n\n` +
-      `台積電：$${p2330} (20MA: $${ma20_2330} | 乖離: ${diff2330_pct}%)\n` +
-      `大盤(0050)：$${p0050} (20MA: $${ma20_0050} | 乖離: ${diff0050_pct}%)\n\n` +
-      `零股試算（預算 $${budget.toLocaleString()} 元）：\n` +
-      `• 建議買進：${shares2330} 股 | 花費：$${totalCost.toLocaleString()} | 剩餘：$${remaining.toLocaleString()}`;
+      \`雙標的加碼通知 [\${todayStr}]\n\n\` +
+      \`台積電：$\${p2330} | 乖離: \${res2330.diff20_pct}% | 評分: \${score2330}\n\` +
+      \`0050：$\${p0050} | 乖離: \${res0050.diff20_pct}% | 評分: \${score0050}\n\n\` +
+      \`零股試算（預算 $\${budget.toLocaleString()} 元）：\n\` +
+      (buy2330 ? \`• 2330 建議買進：\${shares2330} 股 | 花費：$\${cost2330.toLocaleString()}\n\` : \`\`) +
+      (buy0050 ? \`• 0050 建議買進：\${shares0050} 股 | 花費：$\${cost0050.toLocaleString()}\n\` : \`\`) +
+      \`總花費：$\${totalCost.toLocaleString()} | 剩餘：$\${remaining.toLocaleString()}\`;
 
     // ── A. 發送 Email ──
     MailApp.sendEmail({
@@ -209,38 +211,30 @@ function checkMarketAndNotify() {
       const eventEnd   = new Date(now.getTime() + 15 * 60 * 1000);
 
       calendar.createEvent(
-        `${signalEmoji}【即時加碼】台積電評分 ${score}，建議零股買進 ${shares2330} 股`,
+        subject,
         eventStart,
         eventEnd,
         {
-          description:
-            `盤中時間: ${timeStr}\n` +
-            `${signalText}\n` +
-            `台積電現價: $${p2330} (20MA: $${ma20_2330})\n` +
-            `建議零股買進：${shares2330} 股（約 $${totalCost.toLocaleString()} 元）`,
+          description: plainMessage,
           location: "券商 App 下單"
         }
       );
-      Logger.log(`[${todayStr} ${timeStr}] 📅 已在 Google 日曆建立盤中即時提醒。`);
     } catch (calErr) {
-      Logger.log(`[${todayStr} ${timeStr}] ⚠️ Google 日曆新增失敗: ${calErr}`);
+      Logger.log(\`[\${todayStr} \${timeStr}] ⚠️ Google 日曆新增失敗: \${calErr}\`);
     }
 
-    // ── C. 記錄今日已發送（防重複） ──
-    const newRecord = `${todayStr}|${score}`;
+    // ── C. 記錄今日已發送 ──
+    const nextMax2330 = Math.max(score2330, notifiedMaxScore2330);
+    const nextMax0050 = Math.max(score0050, notifiedMaxScore0050);
+    const newRecord = \`\${todayStr}|\${nextMax2330}|\${nextMax0050}\`;
     sheet.getRange("E2").setValue(newRecord);
-    Logger.log(`[${todayStr} ${timeStr}] ✅ 盤中加碼信件與日曆提醒已成功發送 (紀錄: ${newRecord})`);
+    Logger.log(\`[\${todayStr} \${timeStr}] ✅ 通知成功發送 (紀錄: \${newRecord})\`);
 
-  } else if (score >= 40) {
-    Logger.log(`[${todayStr}] ℹ️ 今日已發送過該級別加碼提醒 (目前 ${score} 分，最高紀錄 ${notifiedMaxScore} 分)，跳過。`);
   } else {
-    Logger.log(`[${todayStr}] ℹ️ 評分 ${score}，維持定期定額觀望。`);
+    Logger.log(\`[\${todayStr}] ℹ️ 評分不足或已通知過 (2330: \${score2330}, 0050: \${score0050})。\`);
   }
 }
 
-/**
- * 取得分數級別，用來判斷是否突破新級距
- */
 function getScoreTier(s) {
   if (s >= 80) return 5;
   if (s >= 60) return 4;
@@ -249,25 +243,15 @@ function getScoreTier(s) {
   return 1;
 }
 
-
-/**
- * 判斷當天是否為台灣股市開盤日
- * ★ 修復：使用 todayStr 解析台北時間的 Day-of-week，避免 UTC/Taipei 跨日問題
- *
- * @param {string} todayStr - 格式 "yyyy-MM-dd"（台北時間）
- */
 function isTaiwanMarketOpen(todayStr) {
-  // ★ 從 todayStr 解析成台北時間的 Date 物件，確保 Day-of-week 正確
   const parts = todayStr.split("-").map(Number);
   const localDate = new Date(parts[0], parts[1] - 1, parts[2]);
-  const day = localDate.getDay();  // 0=Sun, 6=Sat（使用本地時區解析）
+  const day = localDate.getDay(); 
 
   if (day === 0 || day === 6) {
-    Logger.log("檢測結果：今天是週末，台灣股市休市。");
     return false;
   }
 
-  // 透過 Yahoo Finance API 確認最新交易日是否為今天（排除國定假日、颱風假）
   try {
     const url = "https://query1.finance.yahoo.com/v8/finance/chart/2330.TW?interval=1d&range=1d";
     const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
@@ -278,35 +262,11 @@ function isTaiwanMarketOpen(todayStr) {
       const tradeDateStr = Utilities.formatDate(new Date(lastTradeTs * 1000), "Asia/Taipei", "yyyy-MM-dd");
 
       if (tradeDateStr !== todayStr) {
-        Logger.log(`檢測結果：今天 (${todayStr}) 非開盤交易日 (股市最新交易日: ${tradeDateStr})。`);
         return false;
       }
     }
   } catch (e) {
-    Logger.log("⚠️ 無法驗證開盤狀態（Yahoo API 連線失敗），以週末排除規則為準。錯誤：" + e);
+    Logger.log("⚠️ API 連線失敗: " + e);
   }
   return true;
-}
-
-
-/**
- * 手動測試：Email + Google 日曆
- * 在 GAS 編輯器中手動執行此函數來驗證整合是否正常
- */
-function testCalendarAndEmail() {
-  const userEmail = Session.getActiveUser().getEmail();
-  const calendar  = CalendarApp.getDefaultCalendar();
-  const now       = new Date();
-  const endTime   = new Date(now.getTime() + 15 * 60 * 1000);
-
-  calendar.createEvent("🧪【測試提醒】台積電 2330 盤中即時通知測試（v3.0）", now, endTime, {
-    description: "測試台灣股市開盤日自動判斷、階梯式紀錄機制、日曆即時提醒建立流程。"
-  });
-
-  MailApp.sendEmail(
-    userEmail,
-    "🧪【測試提醒】台積電 2330 自動化警示整合成功（v3.0）",
-    "您的台積電 (2330) 智慧提醒系統 v3.0 運作完全正常！\n已升級：支援盤中監控 (09:00~13:45) / 階梯式發信防擾 / 日曆即時彈出。"
-  );
-  Logger.log(`測試信件已發送至: ${userEmail}`);
 }

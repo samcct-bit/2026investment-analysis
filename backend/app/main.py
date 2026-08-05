@@ -30,16 +30,20 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
     data_2330 = get_stock_analysis("2330.TW")
     data_0050 = get_stock_analysis("0050.TW")
 
-    if not data_2330:
-        return JSONResponse(status_code=500, content={"success": False, "message": "無法取得台積電 2330 之即時數據"})
+    if not data_2330 or not data_0050:
+        return JSONResponse(status_code=500, content={"success": False, "message": "無法取得即時數據"})
 
     p_2330 = data_2330["current_price"]
     ma_2330 = data_2330["ma_20"]
+    ma50_2330 = data_2330["ma_50"]
     diff_2330 = data_2330["diff_20_pct"]
+    score_2330 = data_2330["signal"]["score"]
 
-    m_price = data_0050["current_price"] if data_0050 else 0
-    m_diff = data_0050["diff_20_pct"] if data_0050 else 0
-    m_status = data_0050["status_text"] if data_0050 else "大盤資料讀取中"
+    p_0050 = data_0050["current_price"]
+    ma_0050 = data_0050["ma_20"]
+    ma50_0050 = data_0050["ma_50"]
+    diff_0050 = data_0050["diff_20_pct"]
+    score_0050 = data_0050["signal"]["score"]
 
     if mode == "tranche2":
         mode_title = "⚖️ 二階段分批 (首批 50% 預算現價進場，50% 預留防守)"
@@ -51,9 +55,27 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
         mode_title = "🚀 單次即刻加碼 (100% 預算現價進場)"
         ratio = 1.00
 
-    allocated_budget = budget * ratio
-    shares_2330 = int(allocated_budget // p_2330)
-    total_cost = round(shares_2330 * p_2330, 2)
+    half_budget = budget / 2 * ratio
+
+    # 2330
+    if score_2330 >= 40:
+        alloc_2330 = half_budget
+        shares_2330 = int(alloc_2330 // p_2330)
+    else:
+        alloc_2330 = 0
+        shares_2330 = 0
+    total_cost_2330 = round(shares_2330 * p_2330, 2)
+
+    # 0050
+    if score_0050 >= 40:
+        alloc_0050 = half_budget
+        shares_0050 = int(alloc_0050 // p_0050)
+    else:
+        alloc_0050 = 0
+        shares_0050 = 0
+    total_cost_0050 = round(shares_0050 * p_0050, 2)
+
+    total_cost = total_cost_2330 + total_cost_0050
     remaining_cash = round(budget - total_cost, 2)
 
     return {
@@ -64,17 +86,29 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
         "data_2330": {
             "price": p_2330,
             "ma20": ma_2330,
+            "ma50": ma50_2330,
             "diff_pct": diff_2330,
             "shares": shares_2330,
-            "cost": total_cost,
-            "allocated_budget": round(allocated_budget, 2)
+            "cost": total_cost_2330,
+            "allocated_budget": round(alloc_2330, 2)
         },
+        "signal_2330": data_2330["signal"],
+        "data_0050": {
+            "price": p_0050,
+            "ma20": ma_0050,
+            "ma50": ma50_0050,
+            "diff_pct": diff_0050,
+            "shares": shares_0050,
+            "cost": total_cost_0050,
+            "allocated_budget": round(alloc_0050, 2)
+        },
+        "signal_0050": data_0050["signal"],
         "market_context": {
             "ticker": "0050.TW",
             "name": "元大台灣50 (大盤指標)",
-            "price": m_price,
-            "diff_pct": m_diff,
-            "status_text": m_status
+            "price": p_0050,
+            "diff_pct": diff_0050,
+            "status_text": data_0050["status_text"]
         },
         "total_cost": total_cost,
         "remaining_cash": remaining_cash

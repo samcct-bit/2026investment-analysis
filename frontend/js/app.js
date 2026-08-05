@@ -113,38 +113,46 @@ async function loadStockData(ticker) {
         }
 
         // ── 加碼評分卡片 (Score Gauge) ──
-        const statusTextElem = document.getElementById("statusText");
-        const statusCard     = document.getElementById("statusCard");
-        const signalLight    = document.getElementById("signalLight");
-        const scoreValueElem = document.getElementById("scoreValue");
-        const scoreRingPath  = document.getElementById("scoreRingPath");
+        function updateGauge(suffix, signal) {
+            const statusTextElem = document.getElementById("statusText" + suffix);
+            const statusCard     = document.getElementById("statusCard" + suffix);
+            const signalLight    = document.getElementById("signalLight" + suffix);
+            const scoreValueElem = document.getElementById("scoreValue" + suffix);
+            const scoreRingPath  = document.getElementById("scoreRingPath" + suffix);
 
-        statusTextElem.innerText = signal.text;
-        signalLight.innerText    = signal.emoji;
-        
-        const score = signal.score !== undefined ? signal.score : 0;
-        if (scoreValueElem) scoreValueElem.innerText = score;
+            if (!statusTextElem) return;
+            statusTextElem.innerText = signal.text;
+            signalLight.innerText    = signal.emoji;
+            
+            const score = signal.score !== undefined ? signal.score : 0;
+            if (scoreValueElem) scoreValueElem.innerText = score;
 
-        const color = signal.color || "#3b82f6";
-        statusTextElem.style.color = color;
-        
-        if (scoreRingPath) {
-            const circumference = 282.7;
-            const offset = circumference - (score / 100) * circumference;
-            scoreRingPath.style.strokeDashoffset = offset;
-            scoreRingPath.style.stroke = color;
+            const color = signal.color || "#3b82f6";
+            statusTextElem.style.color = color;
+            
+            if (scoreRingPath) {
+                const circumference = 282.7;
+                const offset = circumference - (score / 100) * circumference;
+                scoreRingPath.style.strokeDashoffset = offset;
+                scoreRingPath.style.stroke = color;
+            }
+
+            // 解析 hex color 以設定透明背景
+            let r=59, g=130, b=246; // default blue
+            const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+            if (hexMatch) {
+                r = parseInt(hexMatch[1], 16);
+                g = parseInt(hexMatch[2], 16);
+                b = parseInt(hexMatch[3], 16);
+            }
+            statusCard.style.background = `rgba(${r},${g},${b},0.15)`;
+            statusCard.style.borderColor = `rgba(${r},${g},${b},0.5)`;
         }
 
-        // 解析 hex color 以設定透明背景
-        let r=59, g=130, b=246; // default blue
-        const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
-        if (hexMatch) {
-            r = parseInt(hexMatch[1], 16);
-            g = parseInt(hexMatch[2], 16);
-            b = parseInt(hexMatch[3], 16);
+        updateGauge("2330", signal);
+        if (mResData.success) {
+            updateGauge("0050", mResData.data.signal);
         }
-        statusCard.style.background = `rgba(${r},${g},${b},0.15)`;
-        statusCard.style.borderColor = `rgba(${r},${g},${b},0.5)`;
 
         document.getElementById("chartBadge").innerText = `${data.name} (${data.ticker})`;
 
@@ -192,28 +200,23 @@ async function loadAllocationAdvice() {
         }
 
         const d2  = resData.data_2330;
+        const sig2 = resData.signal_2330;
+        const d0  = resData.data_0050;
+        const sig0 = resData.signal_0050;
         const mc  = resData.market_context;
-        const sig = resData.signal_2330;
 
-        const sc = sig?.color || "#3b82f6";
+        const sc2 = sig2?.color || "#3b82f6";
+        const sc0 = sig0?.color || "#3b82f6";
 
         calcResultsBox.innerHTML = `
             <div class="stock-alloc-card tsmc-card">
-                <h4>💎 2330 台積電零股建議試算
+                <h4>💎 2330 台積電 (50% 預算)
                     <span class="price-tag">$${d2.price} 元 / 股</span>
                 </h4>
                 <div class="alloc-signal-row">
-                    <span class="mini-signal" style="color:${sc}">${sig?.emoji || "📊"} ${sig?.text || ""}</span>
+                    <span class="mini-signal" style="color:${sc2}">${sig2?.emoji || "📊"} ${sig2?.text || ""} (評分: ${sig2?.score})</span>
                 </div>
                 <div class="alloc-metrics-row">
-                    <div class="alloc-metric">
-                        <span class="alloc-label">月線 (20MA)</span>
-                        <span class="alloc-value">$${d2.ma20}</span>
-                    </div>
-                    <div class="alloc-metric">
-                        <span class="alloc-label">季線 (50MA)</span>
-                        <span class="alloc-value">$${d2.ma50}</span>
-                    </div>
                     <div class="alloc-metric">
                         <span class="alloc-label">月線乖離率</span>
                         <span class="alloc-value" style="color:${d2.diff_pct < 0 ? '#ef4444':'#10b981'}">${d2.diff_pct}%</span>
@@ -231,18 +234,33 @@ async function loadAllocationAdvice() {
             </div>
 
             <div class="stock-alloc-card market-card">
-                <h4>💡 資金策略 &amp; 大盤對照</h4>
-                <p class="strategy-mode">${resData.mode_title}</p>
-                <div class="market-info">
+                <h4>📈 0050 大盤ETF (50% 預算)
+                    <span class="price-tag">$${d0.price} 元 / 股</span>
+                </h4>
+                <div class="alloc-signal-row">
+                    <span class="mini-signal" style="color:${sc0}">${sig0?.emoji || "📊"} ${sig0?.text || ""} (評分: ${sig0?.score})</span>
+                </div>
+                <div class="alloc-metrics-row">
                     <div class="alloc-metric">
-                        <span class="alloc-label">大盤 0050</span>
-                        <span class="alloc-value">$${mc.price} 元（${mc.diff_pct}%）</span>
-                    </div>
-                    <div class="alloc-metric">
-                        <span class="alloc-label">剩餘預備金</span>
-                        <span class="alloc-value positive">$${formatNum(resData.remaining_cash)} 元</span>
+                        <span class="alloc-label">月線乖離率</span>
+                        <span class="alloc-value" style="color:${d0.diff_pct < 0 ? '#ef4444':'#10b981'}">${d0.diff_pct}%</span>
                     </div>
                 </div>
+                <div class="share-result">
+                    <span class="share-label">建議下單</span>
+                    <span class="share-count">${d0.shares}</span>
+                    <span class="share-unit">股零股</span>
+                </div>
+                <div class="cost-row">
+                    <span>配置預算：<strong>$${formatNum(d0.allocated_budget)}</strong> 元</span>
+                    <span>實際花費：<strong class="cost-highlight">$${formatNum(d0.cost)}</strong> 元</span>
+                </div>
+            </div>
+            
+            <div class="stock-alloc-card summary-card" style="grid-column: 1 / -1; margin-top: 15px; border: 1px dashed #3b82f6;">
+                <h4>💡 資金總結 (${resData.mode_title})</h4>
+                <p>總預算: <strong>$${formatNum(resData.budget)}</strong> | 總花費: <strong>$${formatNum(resData.total_cost)}</strong> | 剩餘預備金: <strong style="color: #10b981">$${formatNum(resData.remaining_cash)}</strong></p>
+                <p style="font-size: 13px; color: #94a3b8; margin-top: 5px;">* 僅評分達 40 分以上的標的才會分配資金並建議買進。</p>
             </div>`;
 
     } catch (err) {
