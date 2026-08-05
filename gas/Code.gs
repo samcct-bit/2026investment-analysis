@@ -57,21 +57,42 @@ function checkMarketAndNotify() {
   const below20 = p2330 < ma20_2330;
   const below50 = !isNaN(ma50_2330) && p2330 < ma50_2330;
 
-  // ── 三燈號複合判斷 ──
-  let signalEmoji, signalText;
-  if (below50) {
-    signalEmoji = "🔴"; signalText = "紅燈：跌破季線，趨勢偏空，暫停加碼";
-  } else if (below20) {
-    signalEmoji = "🟡"; signalText = "黃燈：跌破月線，分批試水（待季線確認）";
+  // ── 評分系統（GAS 版，不含 RSI） ──
+  let score = 0;
+  
+  // 月線乖離得分 (0-50)
+  if (diff2330_pct <= -18) score += 50;
+  else if (diff2330_pct <= -12) score += 45;
+  else if (diff2330_pct <= -7) score += 37;
+  else if (diff2330_pct <= -3) score += 25;
+  else if (diff2330_pct <= 0) score += 12;
+  
+  // 季線位置得分 (0-20)
+  if (diff0050_pct <= -10) score += 20;
+  else if (diff0050_pct <= -5) score += 15;
+  else if (diff0050_pct <= 0) score += 10;
+
+  // 加上預設 RSI 基本分 15 分
+  score += 15;
+  
+  let signalEmoji, signalText, levelClass;
+  if (score <= 20) {
+      signalEmoji = "⏸️"; signalText = "定期定額區 (維持月定投)"; levelClass = "#3b82f6";
+  } else if (score <= 40) {
+      signalEmoji = "⚡"; signalText = "輕度加碼機會 (動用預備金 15%)"; levelClass = "#06b6d4";
+  } else if (score <= 60) {
+      signalEmoji = "🟢"; signalText = "良好加碼機會 (動用預備金 33%)"; levelClass = "#10b981";
+  } else if (score <= 80) {
+      signalEmoji = "💪"; signalText = "強力加碼機會 (動用預備金 60%)"; levelClass = "#f59e0b";
   } else {
-    signalEmoji = "🔵"; signalText = "藍燈：多頭觀望，維持定期定額";
+      signalEmoji = "🔥"; signalText = "歷史性買點 (動用預備金 85%)"; levelClass = "#ef4444";
   }
 
   Logger.log(`[${todayStr}] 台積電: ${p2330} (20MA: ${ma20_2330}, 乖離: ${diff2330_pct}%) ${signalEmoji} ${signalText}`);
   Logger.log(`[${todayStr}] 大盤(0050): ${p0050} (20MA: ${ma20_0050})`);
 
-  // ── 只有跌破月線且今日尚未發信，才觸發通知 ──
-  if (below20 && lastNotified !== todayStr) {
+  // ── 只有在評分 > 20（代表建議加碼）且今日尚未發信時，才觸發通知 ──
+  if (score > 20 && lastNotified !== todayStr) {
     const userEmail = Session.getActiveUser().getEmail();
 
     // 零股試算
@@ -88,7 +109,7 @@ function checkMarketAndNotify() {
           <p style="margin: 6px 0 0; opacity: 0.9; font-size: 14px;">偵測日期：${todayStr}</p>
         </div>
         <div style="padding: 24px; background-color: #ffffff; color: #1f2937;">
-          <p style="font-size: 15px;"><strong>三燈號複合訊號：${signalEmoji} ${signalText}</strong></p>
+          <p style="font-size: 15px;"><strong>加碼強度評分：${score} 分 | ${signalEmoji} ${signalText}</strong></p>
 
           <div style="background-color: #f8fafc; border-left: 4px solid #059669; padding: 16px; border-radius: 6px; margin: 16px 0;">
             <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
@@ -122,7 +143,7 @@ function checkMarketAndNotify() {
               <li>建議買進股數：<strong>${shares2330} 股零股</strong></li>
               <li>預估總花費：<strong>$${totalCost.toLocaleString()} 元</strong></li>
               <li>剩餘預備金：<strong>$${remaining.toLocaleString()} 元</strong></li>
-              <li>加碼心法：請依三燈號分批執行，${signalEmoji === '🔴' ? '⚠️ 目前跌破季線，建議暫停加碼觀望。' : '切忌一次全額 All-in。'}</li>
+              <li>加碼心法：評分越高代表安全邊際越高，請依建議資金比例分批進場，切忌一次 All-in。</li>
             </ul>
           </div>
         </div>
@@ -133,7 +154,7 @@ function checkMarketAndNotify() {
 
     const plainMessage =
       `台積電 (2330.TW) 加碼通知 [${todayStr}]\n` +
-      `${signalEmoji} ${signalText}\n\n` +
+      `加碼強度評分：${score} 分 | ${signalEmoji} ${signalText}\n\n` +
       `台積電：$${p2330} (20MA: $${ma20_2330} | 乖離: ${diff2330_pct}%)\n` +
       `大盤(0050)：$${p0050} (20MA: $${ma20_0050} | 乖離: ${diff0050_pct}%)\n\n` +
       `零股試算（預算 $${budget.toLocaleString()} 元）：\n` +
@@ -236,7 +257,7 @@ function testCalendarAndEmail() {
   const endTime   = new Date(now.getTime() + 15 * 60 * 1000);
 
   calendar.createEvent("🧪【測試提醒】台積電 2330 日曆與通知整合測試（v2.0）", now, endTime, {
-    description: "測試台灣股市開盤日自動判斷、三燈號複合訊號、日曆 13:30 固定提醒建立流程。"
+    description: "測試台灣股市開盤日自動判斷、加碼強度評分系統、日曆 13:30 固定提醒建立流程。"
   });
 
   MailApp.sendEmail(

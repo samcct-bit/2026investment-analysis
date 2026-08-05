@@ -81,39 +81,70 @@ def compute_indicators(df):
     return df
 
 
-def get_signal_level(price, ma_20, ma_50, rsi):
-    """三燈號複合訊號：月線、季線、RSI 三項交叉確認"""
-    below_ma20 = price < ma_20
-    below_ma50 = price < ma_50
-
-    if below_ma50:
-        return {
-            "level": "red",
-            "emoji": "🔴",
-            "text": "紅燈：跌破季線，趨勢偏空，暫停加碼觀望",
-            "action": "等待 RSI < 25 或重回季線以上再考慮建倉"
-        }
-    elif below_ma20 and rsi < 35:
-        return {
-            "level": "green",
-            "emoji": "🟢",
-            "text": "綠燈：強力加碼訊號（跌破月線 + RSI 超賣 + 季線支撐）",
-            "action": "積極分批加碼，歷史上為優質買點"
-        }
-    elif below_ma20:
-        return {
-            "level": "yellow",
-            "emoji": "🟡",
-            "text": "黃燈：謹慎試水（跌破月線，RSI 待確認，季線尚支撐）",
-            "action": "輕度試水（1/3 預備金），等 RSI < 35 確認後再加碼"
-        }
+def compute_accumulation_score(price, ma_20, ma_50, rsi):
+    """計算加碼強度評分 (0~100)"""
+    score = 0
+    
+    # 維度 1：月線乖離率得分（0～50 分）
+    diff_20_pct = ((price - ma_20) / ma_20) * 100 if ma_20 else 0
+    if diff_20_pct > 0:
+        score += 0
+    elif diff_20_pct > -3:
+        score += 12
+    elif diff_20_pct > -7:
+        score += 25
+    elif diff_20_pct > -12:
+        score += 37
+    elif diff_20_pct > -18:
+        score += 45
     else:
-        return {
-            "level": "neutral",
-            "emoji": "🔵",
-            "text": "藍燈：多頭觀望（股價健康高於月線與季線）",
-            "action": "維持定期定額，預備金靜候更好買點"
-        }
+        score += 50
+        
+    # 維度 2：RSI-14 超賣得分（0～30 分）
+    if rsi > 60:
+        score += 0
+    elif rsi > 50:
+        score += 5
+    elif rsi > 40:
+        score += 10
+    elif rsi > 30:
+        score += 20
+    elif rsi > 20:
+        score += 27
+    else:
+        score += 30
+        
+    # 維度 3：季線 (50MA) 位置加分（0～20 分）
+    diff_50_pct = ((price - ma_50) / ma_50) * 100 if ma_50 else 0
+    if diff_50_pct > 0:
+        score += 0
+    elif diff_50_pct > -5:
+        score += 10
+    elif diff_50_pct > -10:
+        score += 15
+    else:
+        score += 20
+        
+    # 決定建議級別
+    if score <= 20:
+        level, emoji, text, action, color = "blue", "⏸️", "定期定額區", "維持月定投，不動用預備金", "#3b82f6"
+    elif score <= 40:
+        level, emoji, text, action, color = "cyan", "⚡", "輕度加碼機會", "動用預備金 15%", "#06b6d4"
+    elif score <= 60:
+        level, emoji, text, action, color = "green", "🟢", "良好加碼機會", "動用預備金 33%", "#10b981"
+    elif score <= 80:
+        level, emoji, text, action, color = "orange", "💪", "強力加碼機會", "動用預備金 60%", "#f59e0b"
+    else:
+        level, emoji, text, action, color = "red", "🔥", "歷史性買點", "動用預備金 85%，全力建倉", "#ef4444"
+
+    return {
+        "score": score,
+        "level": level,
+        "emoji": emoji,
+        "text": text,
+        "action": action,
+        "color": color
+    }
 
 
 def get_stock_analysis(ticker_symbol="2330.TW", period="60d"):
@@ -167,7 +198,7 @@ def get_stock_analysis(ticker_symbol="2330.TW", period="60d"):
 
     is_drop_below_ma20 = current_price < ma_20
     is_drop_below_ma50 = current_price < ma_50
-    signal = get_signal_level(current_price, ma_20, ma_50, rsi)
+    signal = compute_accumulation_score(current_price, ma_20, ma_50, rsi)
 
     # ── 歷史資料（含 RSI 與布林通道，供前端三層圖表使用）──
     history_list = []
@@ -202,7 +233,8 @@ def get_stock_analysis(ticker_symbol="2330.TW", period="60d"):
         "rsi": rsi,
         "is_drop_below_ma20": is_drop_below_ma20,
         "is_drop_below_ma50": is_drop_below_ma50,
+        "accumulation_score": signal,
         "signal": signal,
-        "status_text": f"{signal['emoji']} {signal['text']}",
+        "status_text": f"{signal['emoji']} {signal['text']}: {signal['score']}分",
         "history": history_list
     }

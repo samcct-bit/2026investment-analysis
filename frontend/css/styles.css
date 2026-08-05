@@ -154,6 +154,72 @@ body {
 .negative { color: var(--danger); }
 
 /* ─────────────────────────────────────────────────────────────────
+   SCORE GAUGE
+───────────────────────────────────────────────────────────────── */
+.score-gauge-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
+.score-ring-container {
+    position: relative;
+    width: 65px;
+    height: 65px;
+    margin: 8px auto 0;
+}
+
+.score-ring {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.score-ring-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.1);
+    stroke-width: 8;
+}
+
+.score-ring-path {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    transition: stroke-dashoffset 1s ease-out, stroke 0.5s;
+}
+
+.score-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.score-value {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.score-max {
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.text-center { text-align: center; }
+
+/* ─────────────────────────────────────────────────────────────────
    LOADING SPINNER  ★ 新增
 ───────────────────────────────────────────────────────────────── */
 @keyframes spin {

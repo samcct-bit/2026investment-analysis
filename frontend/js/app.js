@@ -112,24 +112,39 @@ async function loadStockData(ticker) {
             rsiLabel.innerText  = "14日 Wilder 標準計算";
         }
 
-        // ── 三燈號訊號卡片 ──
+        // ── 加碼評分卡片 (Score Gauge) ──
         const statusTextElem = document.getElementById("statusText");
         const statusCard     = document.getElementById("statusCard");
         const signalLight    = document.getElementById("signalLight");
+        const scoreValueElem = document.getElementById("scoreValue");
+        const scoreRingPath  = document.getElementById("scoreRingPath");
 
         statusTextElem.innerText = signal.text;
         signalLight.innerText    = signal.emoji;
+        
+        const score = signal.score !== undefined ? signal.score : 0;
+        if (scoreValueElem) scoreValueElem.innerText = score;
 
-        const sigColors = {
-            green:   { bg: "rgba(16,185,129,0.15)", border: "rgba(16,185,129,0.5)", txt: "#10b981" },
-            yellow:  { bg: "rgba(245,158,11,0.15)", border: "rgba(245,158,11,0.5)",  txt: "#f59e0b" },
-            red:     { bg: "rgba(239,68,68,0.15)",  border: "rgba(239,68,68,0.5)",   txt: "#ef4444" },
-            neutral: { bg: "rgba(59,130,246,0.15)", border: "rgba(59,130,246,0.5)",  txt: "#3b82f6" },
-        };
-        const sc = sigColors[signal.level] || sigColors.neutral;
-        statusCard.style.background   = sc.bg;
-        statusCard.style.borderColor  = sc.border;
-        statusTextElem.style.color    = sc.txt;
+        const color = signal.color || "#3b82f6";
+        statusTextElem.style.color = color;
+        
+        if (scoreRingPath) {
+            const circumference = 282.7;
+            const offset = circumference - (score / 100) * circumference;
+            scoreRingPath.style.strokeDashoffset = offset;
+            scoreRingPath.style.stroke = color;
+        }
+
+        // 解析 hex color 以設定透明背景
+        let r=59, g=130, b=246; // default blue
+        const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+        if (hexMatch) {
+            r = parseInt(hexMatch[1], 16);
+            g = parseInt(hexMatch[2], 16);
+            b = parseInt(hexMatch[3], 16);
+        }
+        statusCard.style.background = `rgba(${r},${g},${b},0.15)`;
+        statusCard.style.borderColor = `rgba(${r},${g},${b},0.5)`;
 
         document.getElementById("chartBadge").innerText = `${data.name} (${data.ticker})`;
 
@@ -180,8 +195,7 @@ async function loadAllocationAdvice() {
         const mc  = resData.market_context;
         const sig = resData.signal_2330;
 
-        const sigColor = { green:"#10b981", yellow:"#f59e0b", red:"#ef4444", neutral:"#3b82f6" };
-        const sc = sigColor[sig?.level] || "#3b82f6";
+        const sc = sig?.color || "#3b82f6";
 
         calcResultsBox.innerHTML = `
             <div class="stock-alloc-card tsmc-card">

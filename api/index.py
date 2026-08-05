@@ -70,39 +70,70 @@ def compute_indicators(df):
     return df
 
 
-def get_signal_level(price, ma_20, ma_50, rsi):
-    """三燈號複合訊號系統：結合月線、季線與 RSI 判斷"""
-    below_ma20 = price < ma_20
-    below_ma50 = price < ma_50
-
-    if below_ma50:
-        return {
-            "level": "red",
-            "emoji": "🔴",
-            "text": "紅燈：跌破季線，趨勢偏空，暫停加碼觀望",
-            "action": "等待 RSI < 25 或重回季線以上再考慮建倉"
-        }
-    elif below_ma20 and rsi < 35:
-        return {
-            "level": "green",
-            "emoji": "🟢",
-            "text": "綠燈：強力加碼訊號（跌破月線 + RSI 超賣 + 季線支撐）",
-            "action": "積極分批加碼，歷史上為優質買點"
-        }
-    elif below_ma20:
-        return {
-            "level": "yellow",
-            "emoji": "🟡",
-            "text": "黃燈：謹慎試水（跌破月線，RSI 待確認，季線尚支撐）",
-            "action": "輕度試水（1/3 預備金），等 RSI 走低至 35 以下再加碼"
-        }
+def compute_accumulation_score(price, ma_20, ma_50, rsi):
+    """計算加碼強度評分 (0~100)"""
+    score = 0
+    
+    # 維度 1：月線乖離率得分（0～50 分）
+    diff_20_pct = ((price - ma_20) / ma_20) * 100 if ma_20 else 0
+    if diff_20_pct > 0:
+        score += 0
+    elif diff_20_pct > -3:
+        score += 12
+    elif diff_20_pct > -7:
+        score += 25
+    elif diff_20_pct > -12:
+        score += 37
+    elif diff_20_pct > -18:
+        score += 45
     else:
-        return {
-            "level": "neutral",
-            "emoji": "🔵",
-            "text": "藍燈：多頭觀望（股價健康高於月線與季線）",
-            "action": "維持定期定額，預備金靜候更好買點"
-        }
+        score += 50
+        
+    # 維度 2：RSI-14 超賣得分（0～30 分）
+    if rsi > 60:
+        score += 0
+    elif rsi > 50:
+        score += 5
+    elif rsi > 40:
+        score += 10
+    elif rsi > 30:
+        score += 20
+    elif rsi > 20:
+        score += 27
+    else:
+        score += 30
+        
+    # 維度 3：季線 (50MA) 位置加分（0～20 分）
+    diff_50_pct = ((price - ma_50) / ma_50) * 100 if ma_50 else 0
+    if diff_50_pct > 0:
+        score += 0
+    elif diff_50_pct > -5:
+        score += 10
+    elif diff_50_pct > -10:
+        score += 15
+    else:
+        score += 20
+        
+    # 決定建議級別
+    if score <= 20:
+        level, emoji, text, action, color = "blue", "⏸️", "定期定額區", "維持月定投，不動用預備金", "#3b82f6"
+    elif score <= 40:
+        level, emoji, text, action, color = "cyan", "⚡", "輕度加碼機會", "動用預備金 15%", "#06b6d4"
+    elif score <= 60:
+        level, emoji, text, action, color = "green", "🟢", "良好加碼機會", "動用預備金 33%", "#10b981"
+    elif score <= 80:
+        level, emoji, text, action, color = "orange", "💪", "強力加碼機會", "動用預備金 60%", "#f59e0b"
+    else:
+        level, emoji, text, action, color = "red", "🔥", "歷史性買點", "動用預備金 85%，全力建倉", "#ef4444"
+
+    return {
+        "score": score,
+        "level": level,
+        "emoji": emoji,
+        "text": text,
+        "action": action,
+        "color": color
+    }
 
 
 def get_stock_analysis(ticker_symbol="2330.TW"):
@@ -134,7 +165,7 @@ def get_stock_analysis(ticker_symbol="2330.TW"):
 
     is_drop_below_ma20 = current_price < ma_20
     is_drop_below_ma50 = current_price < ma_50
-    signal = get_signal_level(current_price, ma_20, ma_50, rsi)
+    signal = compute_accumulation_score(current_price, ma_20, ma_50, rsi)
 
     # 歷史資料（含 RSI 與布林通道，供圖表使用）
     history_list = []
@@ -169,8 +200,9 @@ def get_stock_analysis(ticker_symbol="2330.TW"):
         "rsi": rsi,
         "is_drop_below_ma20": is_drop_below_ma20,
         "is_drop_below_ma50": is_drop_below_ma50,
+        "accumulation_score": signal,
         "signal": signal,
-        "status_text": f"{signal['emoji']} {signal['text']}",
+        "status_text": f"{signal['emoji']} {signal['text']}: {signal['score']}分",
         "history": history_list
     }
 
@@ -185,117 +217,71 @@ def generate_ai_report(stock_data):
     ma50       = stock_data["ma_50"]
     diff_pct   = stock_data["diff_20_pct"]
     rsi        = stock_data["rsi"]
-    is_below20 = stock_data["is_drop_below_ma20"]
-    is_below50 = stock_data["is_drop_below_ma50"]
-    signal     = stock_data["signal"]
+    signal     = stock_data["accumulation_score"]
+    score      = signal["score"]
     name       = stock_data["name"]
 
-    # ── 乖離率分層建議邏輯 ──────────────────────────
-    if not is_below20:
-        tier_title = f"🔵 {name} 多頭觀望 — 維持定期定額策略"
+    # ── 以評分為基礎產生建議 ──────────────────────────
+    if score <= 20:
+        tier_title = f"⏸️ {name} 定期定額區 (評分: {score}/100)"
         strategy = (
-            f"目前 {name} 股價 <strong>${price}</strong> 高於 20MA（<strong>${ma20}</strong>），"
-            f"正乖離 <strong>+{diff_pct}%</strong>。RSI <strong>{rsi}</strong>，趨勢健康。"
+            f"目前 {name} 股價 <strong>${price}</strong>，加碼評分 <strong>{score} 分</strong>。趨勢偏向觀望或多頭，不動用預備金。"
         )
         recommendation = [
             "維持定期定額扣款，不撥用預備金進行額外加碼。",
-            f"警戒線設定：若未來股價回跌至 <strong>${ma20}</strong> 以下，系統將自動推播提醒。",
-            "預備金建議停放高利活存或短債 ETF，靜候更好的加碼點。",
-            "若 RSI 升至 70 以上，可考慮部分停利，鎖定短線獲利。"
+            "預備金靜候更好的加碼點，可暫存於高利活存或短債 ETF。",
+            "此時是定期定額區，耐心等待下次大跌機會。"
         ]
-
-    elif is_below50:
-        tier_title = f"🔴 {name} 跌破季線 — 趨勢偏空，暫停加碼"
+    elif score <= 40:
+        tier_title = f"⚡ {name} 輕度加碼機會 (評分: {score}/100)"
         strategy = (
-            f"⚠️ 警示：{name} 股價 <strong>${price}</strong> 已跌破 50日季線（<strong>${ma50}</strong>），"
-            f"月線乖離 <strong>{diff_pct}%</strong>，RSI <strong>{rsi}</strong>。目前為下降趨勢，不宜積極追低。"
+            f"{name} 股價 <strong>${price}</strong>，加碼評分 <strong>{score} 分</strong>。股價適度拉回，適合小額試水。"
         )
         recommendation = [
-            "<strong>暫停預備金加碼</strong>，避免在下降趨勢中越套越深。",
-            f"關鍵觀察：等待 RSI 跌至 <strong>25</strong> 以下出現底背離訊號，或股價重新站回季線 <strong>${ma50}</strong> 以上。",
-            f"極端情況下（RSI < 20）可考慮以預備金 10~15% 極小部位試水建倉。",
-            "保留大部分預備金（85%+），等候趨勢反轉確認後再積極加碼。"
+            "可動用預備金 <strong>15%</strong> 進行輕度加碼。",
+            "分批建倉，不用急著一次買滿，觀察後續支撐狀況。"
         ]
-
-    elif diff_pct > -3:
-        tier_title = f"🟡 {name} 月線邊緣 — 觀望等待確認訊號"
-        t1 = round(ma20 * 0.97, 2)
-        t2 = round(ma20 * 0.94, 2)
+    elif score <= 60:
+        tier_title = f"🟢 {name} 良好加碼機會 (評分: {score}/100)"
         strategy = (
-            f"{name} 剛跌破 20MA（<strong>${ma20}</strong>），負乖離僅 <strong>{diff_pct}%</strong>，"
-            f"RSI <strong>{rsi}</strong>。幅度輕微，可能只是短暫震盪，建議再等 1~2 個交易日確認方向。"
+            f"{name} 股價 <strong>${price}</strong> 顯著修正，加碼評分 <strong>{score} 分</strong>。歷史上是不錯的中長線買點。"
         )
         recommendation = [
-            f"目前乖離率僅 {diff_pct}%，屬月線邊緣震盪，<strong>建議觀望 1~2 個交易日</strong>，確認是否為真實跌破。",
-            f"若股價繼續跌至 <strong>${t1}</strong>（月線 -3%），啟動第一批加碼（預備金 1/3）。",
-            f"若股價跌至 <strong>${t2}</strong>（月線 -6%）且 RSI < 40，啟動第二批（再補 1/3）。",
-            f"季線（50MA）位於 <strong>${ma50}</strong>，若跌破季線則立刻轉為觀望模式。"
+            "可動用預備金 <strong>33%</strong> 進行加碼。",
+            "分批買進，累積部位，長期持有勝率高。"
         ]
-
-    elif diff_pct > -7:
-        tier_title = f"🟡 {name} 適度拉回 — 輕度加碼（1/3 預備金）"
-        t1 = round(price, 2)
-        t2 = round(ma20 * 0.97, 2)
-        t3 = round(ma20 * 0.93, 2)
-        rsi_note = "（RSI 接近超賣，反彈機率提升）" if rsi < 40 else "（RSI 尚未超賣，分批為宜）"
+    elif score <= 80:
+        tier_title = f"💪 {name} 強力加碼機會 (評分: {score}/100)"
         strategy = (
-            f"{name} 股價 <strong>${price}</strong> 負乖離 <strong>{diff_pct}%</strong>，"
-            f"RSI <strong>{rsi}</strong>{rsi_note}。屬正常回調範圍，適合輕度分批試水。"
+            f"{name} 股價 <strong>${price}</strong> 已深跌，加碼評分 <strong>{score} 分</strong>。逢低買進的黃金時刻。"
         )
         recommendation = [
-            f"<strong>第一批加碼（1/3 預備金）</strong>：現價 <strong>${t1}</strong> 即刻進場。",
-            f"<strong>第二批防守（加至 2/3）</strong>：若繼續跌至 <strong>${t2}</strong>（月線 -3%），補進第二批。",
-            f"<strong>第三批鐵板（補齊）</strong>：若跌至 <strong>${t3}</strong>（月線 -7%）且 RSI < 30，補齊最後 1/3。",
-            f"季線（50MA）位於 <strong>${ma50}</strong>，若跌破季線，立即停止加碼並轉為觀望。"
+            "可動用預備金 <strong>60%</strong> 強力加碼。",
+            "大跌大買才能有效降低成本，不要害怕短期波動。"
         ]
-
-    elif diff_pct > -12:
-        tier_title = f"🟢 {name} 顯著修正 — 中度加碼（1/3 ~ 2/3 預備金）"
-        t1 = round(price, 2)
-        t2 = round(price * 0.96, 2)
-        rsi_note = f"（已進入超賣區 RSI={rsi}，反彈機率高）" if rsi < 35 else f"（RSI={rsi}，等待進一步走低）"
-        strategy = (
-            f"{name} 股價 <strong>${price}</strong> 已深跌 <strong>{diff_pct}%</strong>，"
-            f"RSI <strong>{rsi}</strong>{rsi_note}。"
-            f"此乖離幅度歷史上為台積電良好的中長線加碼點。"
-        )
-        recommendation = [
-            f"<strong>第一批加碼（1/3 預備金）</strong>：現價 <strong>${t1}</strong> 立即進場，不等待更低點。",
-            f"<strong>第二批加碼（再補 1/3）</strong>：可於 <strong>${t2}</strong>（再跌 4%）或 RSI 跌至 30 以下時補進。",
-            f"RSI 目前 {rsi}，{'已超賣，可更積極部署第二批。' if rsi < 35 else '建議等 RSI 跌至 35 以下確認後再加第二批。'}",
-            f"若股價維持於季線 <strong>${ma50}</strong> 以上，底部結構良好，可信心加碼。"
-        ]
-
     else:
-        tier_title = f"🟢 {name} 極度超賣 — 積極加碼（RSI < 30 確認後全力佈局）"
-        t1 = round(price, 2)
-        rsi_confirm = "🚨 RSI 已低於 30，極度超賣確認！" if rsi < 30 else f"⚠️ 等待 RSI 低於 30（目前 {rsi}）確認後再加碼。"
+        tier_title = f"🔥 {name} 歷史性買點 (評分: {score}/100)"
         strategy = (
-            f"⭐ {name} 股價 <strong>${price}</strong> 大幅跌落 <strong>{diff_pct}%</strong>，"
-            f"RSI <strong>{rsi}</strong>{'——極度超賣！' if rsi < 30 else '（接近超賣）'}。"
-            f"歷史上台積電跌幅超過 12% 後，未來 12 個月平均報酬率呈正向。"
+            f"⭐ {name} 股價 <strong>${price}</strong> 崩跌，超賣嚴重，加碼評分高達 <strong>{score} 分</strong>！千載難逢的機會。"
         )
         recommendation = [
-            f"{rsi_confirm} 現價 <strong>${t1}</strong> 為歷史稀有買點。",
-            "建議分 2~3 次掃貨，不必苦等更低點，大跌大買才能降低整體持倉成本。",
-            f"加碼前確認季線（50MA <strong>${ma50}</strong>）未被大幅跌破；若跌破季線仍需保守。",
-            "可啟動 70~80% 的預備金投入，保留 20~30% 應對極端情境（如市場系統性崩跌）。"
+            "建議動用預備金 <strong>85%</strong>，全力建倉！",
+            "不必苦等更低點，現在就是最好的長期投資進場時機，保留 15% 應對極端情境即可。"
         ]
 
-    # ── 組合 HTML（使用 <strong> 非 Markdown **）──
     rec_html = "".join([f"<li>{r}</li>" for r in recommendation])
     rsi_cls = "rsi-oversold" if rsi < 30 else ("rsi-overbought" if rsi > 70 else "")
     diff_color = "#ef4444" if diff_pct < 0 else "#10b981"
 
     report_html = f"""
-    <div class="ai-report-card signal-{signal['level']}">
+    <div class="ai-report-card" style="border-top: 4px solid {signal['color']}">
         <div class="signal-header">
-            <span class="signal-badge badge-{signal['level']}">{signal['emoji']} {signal['level'].upper()}</span>
+            <span class="signal-badge" style="background-color: {signal['color']}; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;">{signal['emoji']} {signal['text']}</span>
             <h3>{tier_title}</h3>
         </div>
         <p class="report-strategy">{strategy}</p>
         <div class="report-section">
-            <h4>💡 操作建議（依乖離率分層）</h4>
+            <h4>💡 操作建議</h4>
             <ul class="recommendation-list">{rec_html}</ul>
         </div>
         <div class="report-footer">

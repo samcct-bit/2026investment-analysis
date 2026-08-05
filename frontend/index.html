@@ -56,13 +56,23 @@
                     <div class="card-value" id="rsiValue">--</div>
                     <span class="card-sub" id="rsiLabel">14日 Wilder 標準計算</span>
                 </div>
-                <div class="metric-card glass" id="statusCard">
-                    <span class="card-label">三燈號複合訊號</span>
-                    <div class="signal-light-row">
-                        <span id="signalLight" style="font-size: 28px;">⏳</span>
-                        <div class="card-value status-text" id="statusText">讀取中...</div>
+                <div class="metric-card glass score-gauge-card" id="statusCard">
+                    <span class="card-label">加碼強度評分</span>
+                    <div class="score-ring-container">
+                        <svg class="score-ring" viewBox="0 0 100 100">
+                            <circle class="score-ring-bg" cx="50" cy="50" r="45"></circle>
+                            <circle class="score-ring-path" id="scoreRingPath" cx="50" cy="50" r="45"></circle>
+                        </svg>
+                        <div class="score-content">
+                            <span class="score-value" id="scoreValue">--</span>
+                            <span class="score-max">/100</span>
+                        </div>
                     </div>
-                    <span class="card-sub" id="actionHint">自動對應大盤趨勢分析</span>
+                    <div class="signal-light-row" style="justify-content: center; margin-top: 5px;">
+                        <span id="signalLight" style="font-size: 16px;">⏳</span>
+                        <div class="status-text" id="statusText" style="font-size: 13px;">讀取中...</div>
+                    </div>
+                    <span class="card-sub text-center" id="actionHint" style="text-align: center; display: block; margin-top: 5px;">自動對應大盤趨勢分析</span>
                 </div>
             </section>
 
