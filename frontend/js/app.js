@@ -180,6 +180,52 @@ async function loadStockData(ticker) {
 
         document.getElementById("chartBadge").innerText = `${data.name} (${data.ticker})`;
 
+        
+        // ── 渲染市場情緒雷達 ──
+        const sentiment = data.sentiment_data;
+        if (sentiment && sentiment.details) {
+            const getTrendIcon = (pct) => {
+                if (pct > 0) return "<span style='color:var(--success)'>▲</span>";
+                if (pct < 0) return "<span style='color:var(--danger)'>▼</span>";
+                return "-";
+            };
+            const formatPct = (pct) => pct ? pct.toFixed(2) + "%" : "--";
+            const sd = sentiment.details;
+            const contentHtml = `
+                <div class="sentiment-grid">
+                    <div class="sentiment-item">
+                        <span class="sen-label">SOX 費半</span>
+                        <span class="sen-val">${sd.sox ? formatPct(sd.sox.pct_change) : "--"} ${sd.sox ? getTrendIcon(sd.sox.pct_change) : ""}</span>
+                    </div>
+                    <div class="sentiment-item">
+                        <span class="sen-label">TSM ADR</span>
+                        <span class="sen-val">${sd.tsm_adr ? formatPct(sd.tsm_adr.pct_change) : "--"} ${sd.tsm_adr ? getTrendIcon(sd.tsm_adr.pct_change) : ""}</span>
+                    </div>
+                    <div class="sentiment-item">
+                        <span class="sen-label">日經 N225</span>
+                        <span class="sen-val">${sd.n225 ? formatPct(sd.n225.pct_change) : "--"} ${sd.n225 ? getTrendIcon(sd.n225.pct_change) : ""}</span>
+                    </div>
+                    <div class="sentiment-item">
+                        <span class="sen-label">韓國 KS11</span>
+                        <span class="sen-val">${sd.ks11 ? formatPct(sd.ks11.pct_change) : "--"} ${sd.ks11 ? getTrendIcon(sd.ks11.pct_change) : ""}</span>
+                    </div>
+                    <div class="sentiment-item">
+                        <span class="sen-label">台幣匯率</span>
+                        <span class="sen-val">${sd.usdtwd ? formatPct(sd.usdtwd.pct_change) : "--"}</span>
+                    </div>
+                    <div class="sentiment-item">
+                        <span class="sen-label">三大法人買賣超</span>
+                        <span class="sen-val">${sd.institutional !== null ? (sd.institutional / 100000000).toFixed(0) + "億" : "--"}</span>
+                    </div>
+                </div>
+                <div class="sentiment-score-bar">
+                    情緒總分加成：<strong>${sentiment.score}</strong> 分
+                </div>
+            `;
+            const senBox = document.getElementById("sentimentContent");
+            if (senBox) senBox.innerHTML = contentHtml;
+        }
+
         // ── 渲染 AI 報告 ──
         aiReportBox.innerHTML = `
             <div class="market-trend-context">
@@ -234,7 +280,7 @@ async function loadAllocationAdvice() {
 
         calcResultsBox.innerHTML = `
             <div class="stock-alloc-card tsmc-card">
-                <h4>💎 2330 台積電 (50% 預算)
+                <h4>💎 2330 台積電 (100% 預算全額狙擊)
                     <span class="price-tag">$${d2.price} 元 / 股</span>
                 </h4>
                 <div class="alloc-signal-row">
@@ -258,7 +304,7 @@ async function loadAllocationAdvice() {
             </div>
 
             <div class="stock-alloc-card market-card">
-                <h4>📈 0050 大盤ETF (50% 預算)
+                <h4>📈 0050 大盤ETF (純定期定額，不佔預算)
                     <span class="price-tag">$${d0.price} 元 / 股</span>
                 </h4>
                 <div class="alloc-signal-row">

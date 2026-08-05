@@ -55,24 +55,20 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
         mode_title = "🚀 單次即刻加碼 (100% 預算現價進場)"
         ratio = 1.00
 
-    half_budget = budget / 2 * ratio
+    allocated_budget = budget * ratio
 
     # 2330
     if score_2330 >= 40:
-        alloc_2330 = half_budget
+        alloc_2330 = allocated_budget
         shares_2330 = int(alloc_2330 // p_2330)
     else:
         alloc_2330 = 0
         shares_2330 = 0
     total_cost_2330 = round(shares_2330 * p_2330, 2)
 
-    # 0050
-    if score_0050 >= 40:
-        alloc_0050 = half_budget
-        shares_0050 = int(alloc_0050 // p_0050)
-    else:
-        alloc_0050 = 0
-        shares_0050 = 0
+    # 0050 (0050 改為純定期定額，不佔用加碼預算)
+    alloc_0050 = 0
+    shares_0050 = 0
     total_cost_0050 = round(shares_0050 * p_0050, 2)
 
     total_cost = total_cost_2330 + total_cost_0050

@@ -70,7 +70,86 @@ def compute_indicators(df):
     return df
 
 
-def compute_accumulation_score(price, ma_20, ma_50, rsi):
+
+def fetch_market_sentiment():
+    score = 0
+    details = {}
+    
+    symbols = {"sox": "^SOX", "tsm_adr": "TSM", "n225": "^N225", "ks11": "^KS11", "usdtwd": "USDTWD=X"}
+    for key, sym in symbols.items():
+        try:
+            df = fetch_via_yahoo_api(sym)
+            if df is not None and len(df) >= 2:
+                latest = float(df.iloc[-1]["Close"])
+                prev = float(df.iloc[-2]["Close"])
+                pct = (latest - prev) / prev * 100
+                details[key] = {"price": latest, "pct_change": pct}
+            else:
+                details[key] = None
+        except:
+            details[key] = None
+
+    if details.get("sox"):
+        pct = details["sox"]["pct_change"]
+        if pct > 2: score += 4
+        elif pct > 0: score += 2
+        elif pct < -2: score -= 4
+        elif pct < 0: score -= 2
+        
+    if details.get("tsm_adr"):
+        pct = details["tsm_adr"]["pct_change"]
+        if pct > 2: score += 4
+        elif pct > 0: score += 2
+        elif pct < -2: score -= 4
+        elif pct < 0: score -= 2
+        
+    if details.get("n225"):
+        pct = details["n225"]["pct_change"]
+        if pct > 1: score += 2
+        elif pct < -1: score -= 2
+
+    if details.get("ks11"):
+        pct = details["ks11"]["pct_change"]
+        if pct > 1: score += 2
+        elif pct < -1: score -= 2
+        
+    if details.get("usdtwd"):
+        pct = details["usdtwd"]["pct_change"]
+        if pct > 0.3: score -= 2
+        elif pct < -0.3: score += 2
+        
+    details["institutional"] = None
+    try:
+        res = requests.get("https://www.twse.com.tw/fund/BFI82U?response=json", timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("data"):
+                total_net_buy = 0
+                for row in data["data"]:
+                    if "合計" in row[0]:
+                        total_net_buy = int(row[3].replace(',', ''))
+                        break
+                if total_net_buy == 0 and len(data["data"]) > 0:
+                     total_net_buy = int(data["data"][-1][3].replace(',', ''))
+                details["institutional"] = total_net_buy
+                score += max(-4, min(4, int(total_net_buy / 10_000_000_000)))
+    except:
+        pass
+
+    details["margin"] = None
+    try:
+        res = requests.get("https://www.twse.com.tw/exchangeReport/MI_MARGN?response=json", timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("creditList"):
+                pass
+    except:
+        pass
+
+    score = max(-15, min(20, score))
+    return {"score": score, "details": details}
+
+def compute_accumulation_score(price, ma_20, ma_50, rsi, sentiment_score=0):
     """計算加碼強度評分 (0~100)"""
     score = 0
     
@@ -114,6 +193,10 @@ def compute_accumulation_score(price, ma_20, ma_50, rsi):
     else:
         score += 20
         
+    # 加計市場情緒
+    score += sentiment_score
+    score = max(0, min(100, score))
+    
     # 決定建議級別
     if score <= 20:
         level, emoji, text, action, color = "blue", "⏸️", "定期定額區", "維持月定投，不動用預備金", "#3b82f6"
@@ -165,7 +248,8 @@ def get_stock_analysis(ticker_symbol="2330.TW"):
 
     is_drop_below_ma20 = current_price < ma_20
     is_drop_below_ma50 = current_price < ma_50
-    signal = compute_accumulation_score(current_price, ma_20, ma_50, rsi)
+    sentiment_data = fetch_market_sentiment() if ticker_clean.startswith('2330') else {'score': 0, 'details': {}}
+    signal = compute_accumulation_score(current_price, ma_20, ma_50, rsi, sentiment_data['score'])
 
     # 歷史資料（含 RSI 與布林通道，供圖表使用）
     history_list = []
@@ -202,6 +286,7 @@ def get_stock_analysis(ticker_symbol="2330.TW"):
         "is_drop_below_ma50": is_drop_below_ma50,
         "accumulation_score": signal,
         "signal": signal,
+        "sentiment_data": sentiment_data,
         "status_text": f"{signal['emoji']} {signal['text']}: {signal['score']}分",
         "history": history_list
     }
@@ -294,6 +379,7 @@ def generate_ai_report(stock_data):
 
     return {
         "signal": signal,
+        "sentiment_data": sentiment_data,
         "tier_title": tier_title,
         "strategy": strategy,
         "recommendation": recommendation,
@@ -348,24 +434,20 @@ def get_allocation_advice(budget: float = Query(30000, ge=1000), mode: str = Que
         mode_title = "🚀 單次即刻加碼 (100% 預算現價進場)"
         ratio = 1.00
 
-    half_budget = budget / 2 * ratio
+    allocated_budget = budget * ratio
 
     # 2330
     if score_2330 >= 40:
-        alloc_2330 = half_budget
+        alloc_2330 = allocated_budget
         shares_2330 = int(alloc_2330 // p_2330)
     else:
         alloc_2330 = 0
         shares_2330 = 0
     total_cost_2330 = round(shares_2330 * p_2330, 2)
 
-    # 0050
-    if score_0050 >= 40:
-        alloc_0050 = half_budget
-        shares_0050 = int(alloc_0050 // p_0050)
-    else:
-        alloc_0050 = 0
-        shares_0050 = 0
+    # 0050 (0050 改為純定期定額，不佔用加碼預算)
+    alloc_0050 = 0
+    shares_0050 = 0
     total_cost_0050 = round(shares_0050 * p_0050, 2)
 
     total_cost = total_cost_2330 + total_cost_0050

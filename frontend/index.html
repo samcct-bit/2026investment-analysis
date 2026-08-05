@@ -125,6 +125,20 @@
                 </div>
             </section>
 
+            
+            <!-- NEW: 市場情緒雷達 -->
+            <section class="panel sentiment-panel glass">
+                <div class="panel-header">
+                    <h3>🌍 市場情緒雷達 (影響 2330 加碼評分)</h3>
+                </div>
+                <div id="sentimentContent" class="sentiment-content">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>載入情緒數據中...</span>
+                    </div>
+                </div>
+            </section>
+            
             <!-- 2. 圖表 + AI 報告雙欄 -->
             <section class="main-content-row">
                 <!-- 左欄：三層圖表（價格 + 成交量 + RSI） -->
@@ -166,7 +180,7 @@
             <!-- 3. 台積電零股加碼試算 -->
             <section class="panel allocation-panel glass">
                 <div class="panel-header">
-                    <h3>💎 2330 & 0050 雙標的零股配重試算</h3>
+                    <h3>💎 2330 零股加碼試算 (全額狙擊)</h3>
                     <span class="badge highlight-badge">2330 & 0050 雙標的零股配重試算</span>
                 </div>
                 <div class="calc-control-row">
@@ -183,7 +197,7 @@
                         </select>
                     </div>
                     <div class="calc-field btn-field">
-                        <button id="calcBtn">計算 50/50 配重零股股數</button>
+                        <button id="calcBtn">計算 2330 全額狙擊零股股數</button>
                     </div>
                 </div>
                 <div class="calc-results-grid" id="calcResultsBox">
