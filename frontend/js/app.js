@@ -75,8 +75,10 @@ async function loadStockData(ticker) {
             const mData  = mResData.data;
             const mSig   = mData.signal;
             marketSummary = `${mSig.emoji} $${mData.current_price} 元 | 月線乖離: ${mData.diff_20_pct}%`;
-            document.getElementById("actionHint").innerHTML =
-                `📊 大盤(0050)：<strong>${marketSummary}</strong>`;
+            const actionHint = document.getElementById("actionHint");
+            if (actionHint) {
+                actionHint.innerHTML = `📊 大盤(0050)：<strong>${marketSummary}</strong>`;
+            }
         }
 
         // ── 更新指標卡片 ──
