@@ -397,7 +397,7 @@ def generate_ai_report(stock_data):
 
     return {
         "signal": signal,
-        "sentiment_data": sentiment_data,
+        "sentiment_data": stock_data.get("sentiment_data", {}),
         "tier_title": tier_title,
         "strategy": strategy,
         "recommendation": recommendation,
