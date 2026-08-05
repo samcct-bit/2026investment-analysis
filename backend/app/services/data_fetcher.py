@@ -82,23 +82,65 @@ def compute_indicators(df):
 
 
 
+import concurrent.futures
+
 def fetch_market_sentiment():
     score = 0
     details = {}
     
     symbols = {"sox": "^SOX", "tsm_adr": "TSM", "n225": "^N225", "ks11": "^KS11", "usdtwd": "USDTWD=X"}
-    for key, sym in symbols.items():
+    
+    def fetch_sym(key, sym):
         try:
             df = fetch_via_yahoo_api(sym)
             if df is not None and len(df) >= 2:
                 latest = float(df.iloc[-1]["Close"])
                 prev = float(df.iloc[-2]["Close"])
                 pct = (latest - prev) / prev * 100
-                details[key] = {"price": latest, "pct_change": pct}
-            else:
-                details[key] = None
+                return key, {"price": latest, "pct_change": pct}
         except:
-            details[key] = None
+            pass
+        return key, None
+
+    def fetch_twse_inst():
+        try:
+            res = requests.get("https://www.twse.com.tw/fund/BFI82U?response=json", timeout=3)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("data"):
+                    total_net_buy = 0
+                    for row in data["data"]:
+                        if "合計" in row[0]:
+                            total_net_buy = int(row[3].replace(',', ''))
+                            break
+                    if total_net_buy == 0 and len(data["data"]) > 0:
+                         total_net_buy = int(data["data"][-1][3].replace(',', ''))
+                    return "institutional", total_net_buy
+        except:
+            pass
+        return "institutional", None
+
+    def fetch_twse_margin():
+        try:
+            res = requests.get("https://www.twse.com.tw/exchangeReport/MI_MARGN?response=json", timeout=3)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("creditList"):
+                    pass
+        except:
+            pass
+        return "margin", None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
+        futures = []
+        for key, sym in symbols.items():
+            futures.append(executor.submit(fetch_sym, key, sym))
+        futures.append(executor.submit(fetch_twse_inst))
+        futures.append(executor.submit(fetch_twse_margin))
+        
+        for future in concurrent.futures.as_completed(futures):
+            k, v = future.result()
+            details[k] = v
 
     if details.get("sox"):
         pct = details["sox"]["pct_change"]
@@ -129,33 +171,9 @@ def fetch_market_sentiment():
         if pct > 0.3: score -= 2
         elif pct < -0.3: score += 2
         
-    details["institutional"] = None
-    try:
-        res = requests.get("https://www.twse.com.tw/fund/BFI82U?response=json", timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get("data"):
-                total_net_buy = 0
-                for row in data["data"]:
-                    if "合計" in row[0]:
-                        total_net_buy = int(row[3].replace(',', ''))
-                        break
-                if total_net_buy == 0 and len(data["data"]) > 0:
-                     total_net_buy = int(data["data"][-1][3].replace(',', ''))
-                details["institutional"] = total_net_buy
-                score += max(-4, min(4, int(total_net_buy / 10_000_000_000)))
-    except:
-        pass
-
-    details["margin"] = None
-    try:
-        res = requests.get("https://www.twse.com.tw/exchangeReport/MI_MARGN?response=json", timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get("creditList"):
-                pass
-    except:
-        pass
+    inst = details.get("institutional")
+    if inst is not None:
+        score += max(-4, min(4, int(inst / 10_000_000_000)))
 
     score = max(-15, min(20, score))
     return {"score": score, "details": details}
