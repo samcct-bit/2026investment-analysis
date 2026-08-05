@@ -38,23 +38,56 @@
             <section class="metrics-row">
                 <div class="metric-card glass">
                     <span class="card-label">目前股價</span>
-                    <div class="card-value" id="currentPrice">--</div>
+                    <div class="dual-metric">
+                        <div class="main-stock">
+                            <span class="stock-name-label">2330</span>
+                            <div class="card-value" id="currentPrice">--</div>
+                        </div>
+                        <div class="sub-stock">
+                            <span class="stock-name-label">0050</span>
+                            <div class="card-value" id="currentPrice0050">--</div>
+                        </div>
+                    </div>
                     <span class="card-sub" id="latestDate">最後更新: --</span>
                 </div>
                 <div class="metric-card glass">
                     <span class="card-label">20MA 月線</span>
-                    <div class="card-value" id="ma20Price">--</div>
-                    <span class="card-sub" id="diff20">月線乖離 --</span>
+                    <div class="dual-metric">
+                        <div class="main-stock">
+                            <div class="card-value" id="ma20Price">--</div>
+                            <span class="card-sub" id="diff20">月線乖離 --</span>
+                        </div>
+                        <div class="sub-stock">
+                            <div class="card-value" id="ma20Price0050">--</div>
+                            <span class="card-sub" id="diff20_0050">月線乖離 --</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="metric-card glass">
                     <span class="card-label">50MA 季線</span>
-                    <div class="card-value" id="ma50Price">--</div>
-                    <span class="card-sub" id="diff50">季線乖離 --</span>
+                    <div class="dual-metric">
+                        <div class="main-stock">
+                            <div class="card-value" id="ma50Price">--</div>
+                            <span class="card-sub" id="diff50">季線乖離 --</span>
+                        </div>
+                        <div class="sub-stock">
+                            <div class="card-value" id="ma50Price0050">--</div>
+                            <span class="card-sub" id="diff50_0050">季線乖離 --</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="metric-card glass">
                     <span class="card-label">RSI-14（Wilder）</span>
-                    <div class="card-value" id="rsiValue">--</div>
-                    <span class="card-sub" id="rsiLabel">14日 Wilder 標準計算</span>
+                    <div class="dual-metric">
+                        <div class="main-stock">
+                            <div class="card-value" id="rsiValue">--</div>
+                            <span class="card-sub" id="rsiLabel">14日 Wilder 標準計算</span>
+                        </div>
+                        <div class="sub-stock">
+                            <div class="card-value" id="rsiValue0050">--</div>
+                            <span class="card-sub" id="rsiLabel0050">0050 RSI</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="metric-card glass score-gauge-card" id="statusCard2330">
                     <span class="card-label">2330 加碼評分</span>

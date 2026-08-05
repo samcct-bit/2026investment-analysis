@@ -105,13 +105,35 @@ async function loadStockData(ticker) {
         rsiElem.innerText = data.rsi ? data.rsi : "--";
         if (data.rsi < 30) {
             rsiElem.style.color = "#ef4444";
-            rsiLabel.innerText  = "⚠️ 超賣區（< 30），反彈機率高";
+            rsiLabel.innerText  = "⚠️ 超賣區（< 30）";
         } else if (data.rsi > 70) {
             rsiElem.style.color = "#f59e0b";
-            rsiLabel.innerText  = "⚠️ 超買區（> 70），注意短線風險";
+            rsiLabel.innerText  = "⚠️ 超買區（> 70）";
         } else {
             rsiElem.style.color = "var(--text-primary)";
-            rsiLabel.innerText  = "14日 Wilder 標準計算";
+            rsiLabel.innerText  = "14日標準";
+        }
+
+        // ── 寫入 0050 雙軌數據 ──
+        if (mResData.success) {
+            const mData = mResData.data;
+            document.getElementById("currentPrice0050").innerText = `$${mData.current_price}`;
+            document.getElementById("ma20Price0050").innerText = `$${mData.ma_20}`;
+            document.getElementById("ma50Price0050").innerText = `$${mData.ma_50}`;
+
+            const mDiff20Class = mData.diff_20 >= 0 ? "positive" : "negative";
+            const mDiff20Sign = mData.diff_20 >= 0 ? "+" : "";
+            document.getElementById("diff20_0050").innerHTML = `<span class="${mDiff20Class}">${mDiff20Sign}${mData.diff_20} (${mDiff20Sign}${mData.diff_20_pct}%)</span>`;
+
+            const mDiff50Class = mData.diff_50 >= 0 ? "positive" : "negative";
+            const mDiff50Sign = mData.diff_50 >= 0 ? "+" : "";
+            document.getElementById("diff50_0050").innerHTML = `<span class="${mDiff50Class}">${mDiff50Sign}${mData.diff_50} (${mDiff50Sign}${mData.diff_50_pct}%)</span>`;
+
+            const mRsiElem = document.getElementById("rsiValue0050");
+            mRsiElem.innerText = mData.rsi ? mData.rsi : "--";
+            if (mData.rsi < 30) mRsiElem.style.color = "#ef4444";
+            else if (mData.rsi > 70) mRsiElem.style.color = "#f59e0b";
+            else mRsiElem.style.color = "var(--text-primary)";
         }
 
         // ── 加碼評分卡片 (Score Gauge) ──
