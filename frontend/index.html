@@ -190,7 +190,7 @@
 
                     <div class="step-box">
                         <span class="step-num">3</span>
-                        <h4>設定每日觸發器</h4>
+                        <h4>設定每小時自動巡邏 (盤中監控)</h4>
                         <p>在 GAS 編輯器左欄點選「觸發條件」，新增時間型觸發器：</p>
                         <div class="gas-trigger-info">
                             <div class="trigger-item">
@@ -198,17 +198,17 @@
                                 <code>checkMarketAndNotify</code>
                             </div>
                             <div class="trigger-item">
-                                <span class="trigger-label">觸發時間</span>
-                                <strong class="trigger-time">每日 13:30 ～ 14:00</strong>
-                                <span class="trigger-note">（台股收盤後立即執行）</span>
+                                <span class="trigger-label">活動來源</span>
+                                <span>時間驅動 (Time-driven)</span>
                             </div>
                             <div class="trigger-item">
-                                <span class="trigger-label">通知內容</span>
-                                <span>三燈號 Email（含零股試算）+ Google 日曆 13:30 收盤提醒事件</span>
+                                <span class="trigger-label">時間間隔</span>
+                                <strong class="trigger-time">每小時執行一次</strong>
+                                <span class="trigger-note">（或每半小時）</span>
                             </div>
                             <div class="trigger-item">
-                                <span class="trigger-label">手動測試</span>
-                                <span>執行 <code>testCalendarAndEmail</code> 函數，驗證 Email 與日曆整合是否正常</span>
+                                <span class="trigger-label">智慧防擾</span>
+                                <span>系統僅於 09:00~13:45 啟動，同級別分數一天只會發送一次。若分數暴衝至新級別則會發送緊急通知。</span>
                             </div>
                         </div>
                     </div>

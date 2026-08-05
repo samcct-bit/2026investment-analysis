@@ -1,21 +1,33 @@
 /**
  * ====================================================================
- * 2330 台積電智慧投資分析與大盤趨勢自動提醒系統 (GAS v2.0)
+ * 2330 台積電智慧投資分析與大盤趨勢自動提醒系統 (GAS v3.0)
  * ====================================================================
- * 本次修復（P1）：
- * 1. isTaiwanMarketOpen() 改用 todayStr 解析台北時間 Day-of-week，
- *    避免深夜執行時 UTC 與 Asia/Taipei 跨日錯誤。
- * 2. 預算從試算表 F1 儲存格讀取（預設 30000），可由使用者自訂。
- * 3. Google 日曆事件固定為當天 13:30 收盤提醒，不再是腳本執行的當下時間。
- * 4. 三燈號複合訊號（月線 + 季線 + RSI）加入 Email 與日曆描述。
+ * 本次修復（V3.0 盤中即時通知）：
+ * 1. 支援盤中 (09:00~13:45) 每小時/半小時巡邏。
+ * 2. 導入「階梯式紀錄」，E2 格式改為 `YYYY-MM-DD|MaxScore`，
+ *    避免同一天內被同樣的評分轟炸，但若評分突破新級距則會發送緊急通知。
+ * 3. 日曆事件改為偵測當下的即時提醒，讓手機立刻收到推播。
  * ====================================================================
  */
 
 /**
- * 主入口：每日 13:00-14:00 自動觸發
- * 只在台灣股市開盤日執行
+ * 主入口：建議設定為每半小時或每小時自動觸發
+ * 只在台灣股市開盤日的 09:00~13:45 執行
  */
 function checkMarketAndNotify() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const timeZone = "Asia/Taipei";
+  const now = new Date();
+  const todayStr = Utilities.formatDate(now, timeZone, "yyyy-MM-dd");
+  const hour = parseInt(Utilities.formatDate(now, timeZone, "HH"));
+  const minute = parseInt(Utilities.formatDate(now, timeZone, "mm"));
+
+  // ── 檢查是否在盤中時間 (09:00 ~ 13:45) ──
+  const currentTimeVal = hour * 100 + minute;
+  if (currentTimeVal < 900 || currentTimeVal > 1345) {
+    Logger.log(`[${todayStr} ${hour}:${minute}] ℹ️ 目前非盤中時間 (09:00~13:45)，進入休眠。`);
+    return;
+  }
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const timeZone = "Asia/Taipei";
   const todayStr = Utilities.formatDate(new Date(), timeZone, "yyyy-MM-dd");
@@ -33,8 +45,20 @@ function checkMarketAndNotify() {
   const p2330       = parseFloat(sheet.getRange("B2").getValue());
   const ma20_2330   = parseFloat(sheet.getRange("C2").getValue());
   const ma50_2330   = parseFloat(sheet.getRange("D2").getValue()); // ★ 新增：季線
-  const lastNotified = sheet.getRange("E2").getValue()
+  const lastNotifiedStr = sheet.getRange("E2").getValue()
     ? sheet.getRange("E2").getValue().toString().trim() : "";
+  
+  // 解析 E2 紀錄 (格式: YYYY-MM-DD|MaxScore)
+  let notifiedDate = "";
+  let notifiedMaxScore = 0;
+  if (lastNotifiedStr.includes("|")) {
+    const parts = lastNotifiedStr.split("|");
+    notifiedDate = parts[0];
+    notifiedMaxScore = parseInt(parts[1]) || 0;
+  } else {
+    // 相容舊版 (只存日期)
+    notifiedDate = lastNotifiedStr;
+  }
 
   const p0050     = parseFloat(sheet.getRange("B3").getValue());
   const ma20_0050 = parseFloat(sheet.getRange("C3").getValue());
@@ -91,8 +115,17 @@ function checkMarketAndNotify() {
   Logger.log(`[${todayStr}] 台積電: ${p2330} (20MA: ${ma20_2330}, 乖離: ${diff2330_pct}%) ${signalEmoji} ${signalText}`);
   Logger.log(`[${todayStr}] 大盤(0050): ${p0050} (20MA: ${ma20_0050})`);
 
-  // ── 只有在評分 > 20（代表建議加碼）且今日尚未發信時，才觸發通知 ──
-  if (score > 20 && lastNotified !== todayStr) {
+  // ── 智慧防擾機制：只有在評分 >= 40 且 (今日未發信 或 評分突破新級別) 時，才觸發通知 ──
+  let shouldNotify = false;
+  if (score >= 40) {
+    if (notifiedDate !== todayStr) {
+      shouldNotify = true; // 今天還沒發過
+    } else if (score > notifiedMaxScore && getScoreTier(score) > getScoreTier(notifiedMaxScore)) {
+      shouldNotify = true; // 雖然發過，但崩得更深，突破新級別！
+    }
+  }
+
+  if (shouldNotify) {
     const userEmail = Session.getActiveUser().getEmail();
 
     // 零股試算
@@ -100,7 +133,8 @@ function checkMarketAndNotify() {
     const totalCost  = shares2330 * p2330;
     const remaining  = budget - totalCost;
 
-    const subject = `${signalEmoji}【台積電加碼提醒】2330 跌破月線 (目前: $${p2330} | ${signalText})`;
+    const timeStr = Utilities.formatDate(now, timeZone, "HH:mm");
+    const subject = `${signalEmoji}【盤中急跌加碼】2330 評分達 ${score} 分 (目前: $${p2330})`;
 
     const htmlMessage = `
       <div style="font-family: Arial, 'Microsoft JhengHei', sans-serif; max-width: 620px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
@@ -148,7 +182,7 @@ function checkMarketAndNotify() {
           </div>
         </div>
         <div style="background-color: #f3f4f6; padding: 12px; text-align: center; color: #9ca3af; font-size: 12px;">
-          已同步在 Google 日曆建立 13:30 收盤加碼提醒 | 2330 台積電智慧投資監控
+          偵測時間：${todayStr} ${timeStr} | 已同步建立即時日曆提醒
         </div>
       </div>`;
 
@@ -168,42 +202,51 @@ function checkMarketAndNotify() {
       htmlBody: htmlMessage
     });
 
-    // ── B. Google 日曆 — 固定 13:30 收盤提醒 ★ 修復 ──
+    // ── B. Google 日曆 — 即時提醒 (當下 ~ 當下+15分) ──
     try {
       const calendar = CalendarApp.getDefaultCalendar();
-
-      // 取得今天台北時間的 13:30 作為固定提醒時間
-      const todayParts = todayStr.split("-").map(Number);
-      const eventStart = new Date(todayParts[0], todayParts[1] - 1, todayParts[2], 13, 30, 0);
-      const eventEnd   = new Date(todayParts[0], todayParts[1] - 1, todayParts[2], 14,  0, 0);
+      const eventStart = now;
+      const eventEnd   = new Date(now.getTime() + 15 * 60 * 1000);
 
       calendar.createEvent(
-        `${signalEmoji}【加碼提醒】台積電 2330 跌破月線，建議零股買進 ${shares2330} 股`,
+        `${signalEmoji}【即時加碼】台積電評分 ${score}，建議零股買進 ${shares2330} 股`,
         eventStart,
         eventEnd,
         {
           description:
+            `盤中時間: ${timeStr}\n` +
             `${signalText}\n` +
             `台積電現價: $${p2330} (20MA: $${ma20_2330})\n` +
-            `大盤0050: $${p0050} (趨勢: ${status0050})\n` +
             `建議零股買進：${shares2330} 股（約 $${totalCost.toLocaleString()} 元）`,
           location: "券商 App 下單"
         }
       );
-      Logger.log(`[${todayStr}] 📅 已在 Google 日曆建立 13:30 收盤提醒。`);
+      Logger.log(`[${todayStr} ${timeStr}] 📅 已在 Google 日曆建立盤中即時提醒。`);
     } catch (calErr) {
-      Logger.log(`[${todayStr}] ⚠️ Google 日曆新增失敗: ${calErr}`);
+      Logger.log(`[${todayStr} ${timeStr}] ⚠️ Google 日曆新增失敗: ${calErr}`);
     }
 
     // ── C. 記錄今日已發送（防重複） ──
-    sheet.getRange("E2").setValue(todayStr);
-    Logger.log(`[${todayStr}] ✅ 加碼信件與日曆提醒已成功發送至 ${userEmail}`);
+    const newRecord = `${todayStr}|${score}`;
+    sheet.getRange("E2").setValue(newRecord);
+    Logger.log(`[${todayStr} ${timeStr}] ✅ 盤中加碼信件與日曆提醒已成功發送 (紀錄: ${newRecord})`);
 
-  } else if (lastNotified === todayStr) {
-    Logger.log(`[${todayStr}] ℹ️ 今日已發送過加碼提醒，跳過。`);
+  } else if (score >= 40) {
+    Logger.log(`[${todayStr}] ℹ️ 今日已發送過該級別加碼提醒 (目前 ${score} 分，最高紀錄 ${notifiedMaxScore} 分)，跳過。`);
   } else {
-    Logger.log(`[${todayStr}] ℹ️ ${signalEmoji} ${signalText}，維持觀望。`);
+    Logger.log(`[${todayStr}] ℹ️ 評分 ${score}，維持定期定額觀望。`);
   }
+}
+
+/**
+ * 取得分數級別，用來判斷是否突破新級距
+ */
+function getScoreTier(s) {
+  if (s >= 80) return 5;
+  if (s >= 60) return 4;
+  if (s >= 40) return 3;
+  if (s >= 20) return 2;
+  return 1;
 }
 
 
@@ -256,14 +299,14 @@ function testCalendarAndEmail() {
   const now       = new Date();
   const endTime   = new Date(now.getTime() + 15 * 60 * 1000);
 
-  calendar.createEvent("🧪【測試提醒】台積電 2330 日曆與通知整合測試（v2.0）", now, endTime, {
-    description: "測試台灣股市開盤日自動判斷、加碼強度評分系統、日曆 13:30 固定提醒建立流程。"
+  calendar.createEvent("🧪【測試提醒】台積電 2330 盤中即時通知測試（v3.0）", now, endTime, {
+    description: "測試台灣股市開盤日自動判斷、階梯式紀錄機制、日曆即時提醒建立流程。"
   });
 
   MailApp.sendEmail(
     userEmail,
-    "🧪【測試提醒】台積電 2330 自動化警示整合成功（v2.0）",
-    "您的台積電 (2330) 智慧提醒系統 v2.0 運作完全正常！\n已修復：開盤日時區 Bug / 預算從 F1 讀取 / 日曆固定 13:30。"
+    "🧪【測試提醒】台積電 2330 自動化警示整合成功（v3.0）",
+    "您的台積電 (2330) 智慧提醒系統 v3.0 運作完全正常！\n已升級：支援盤中監控 (09:00~13:45) / 階梯式發信防擾 / 日曆即時彈出。"
   );
   Logger.log(`測試信件已發送至: ${userEmail}`);
 }
