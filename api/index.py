@@ -29,17 +29,32 @@ def fetch_via_yahoo_api(symbol="2330.TW"):
         result = json_data.get("chart", {}).get("result", [])
         if not result:
             return None
+            
+        meta = result[0].get("meta", {})
         timestamps = result[0].get("timestamp", [])
         indicators = result[0].get("indicators", {}).get("quote", [{}])[0]
         closes = indicators.get("close", [])
         volumes = indicators.get("volume", [])
+        
         if not timestamps or not closes:
             return None
+            
         records = []
         for ts, c, v in zip(timestamps, closes, volumes):
             if c is not None and not np.isnan(c):
                 dt_str = pd.to_datetime(ts, unit='s').strftime("%Y-%m-%d")
                 records.append({"Date": dt_str, "Close": float(c), "Volume": int(v) if v else 0})
+                
+        # Handle Yahoo EOD delay by appending the real-time quote from meta if missing
+        if meta.get("regularMarketTime") and meta.get("regularMarketPrice"):
+            latest_dt_str = pd.to_datetime(meta["regularMarketTime"], unit='s').strftime("%Y-%m-%d")
+            if not records or records[-1]["Date"] != latest_dt_str:
+                records.append({
+                    "Date": latest_dt_str, 
+                    "Close": float(meta["regularMarketPrice"]), 
+                    "Volume": int(meta.get("regularMarketVolume", 0))
+                })
+                
         if not records:
             return None
         df = pd.DataFrame(records)
