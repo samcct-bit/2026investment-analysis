@@ -3,103 +3,248 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="AI 智慧投資分析助理：2330台積電、2308台達電、0050、006208、009816 五大核心觀察標的即時監控、市場情緒雷達與零股加碼試算">
-    <title>AI 智慧投資分析助理 V5.0 — 五大核心標的監控 & 零股加碼系統</title>
+    <meta name="description" content="台股投資研究與家庭資產風險保護輔助工具：資料來源可追溯、家庭緊急預備金底線保護、ETF穿透集中度檢視與確定性規則回測">
+    <title>台股投資研究與家庭風險保護輔助工具 V6.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <!-- 鎖定 Chart.js 版本，避免大版本破壞性更新 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- 鎖定 Chart.js 4.4.3 版本 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
     <div class="app-container">
 
+        <!-- 頂部定位與安全聲明橫幅 -->
+        <div class="positioning-banner" role="region" aria-label="系統定位與風險優先原則">
+            <span>🛡️ <strong>系統定位：投資研究與家庭資產配置輔助工具</strong>（非自動下單系統、0～100分為規則偏離分而非獲利機率；<strong>家庭緊急預備金底線 450,000 元優先於任何高分訊號</strong>）</span>
+        </div>
+
         <!-- 頂部 Header -->
         <header class="app-header">
             <div class="header-brand">
-                <div class="brand-icon">💎</div>
+                <div class="brand-icon" aria-hidden="true">🧭</div>
                 <div class="brand-text">
-                    <h1>AI 智慧投資分析助理 <span class="version-pill">V5.0</span></h1>
-                    <p class="subtitle">五大預設核心標的 (2330 / 2308 / 0050 / 006208 / 009816) ｜ 市場情緒雷達 ｜ 均線與 RSI 複合訊號 ｜ 動態零股試算</p>
+                    <h1>台股投資研究與家庭風險輔助工具 <span class="version-pill">V6.0 稽核版</span></h1>
+                    <p class="subtitle">五大預設觀察標的 (2330 / 2308 / 0050 / 006208 / 009816) ｜ 資料來源追溯 ｜ 家庭現金底線保護 ｜ ETF 穿透曝險</p>
                 </div>
             </div>
-            <div class="header-search">
-                <input type="text" id="tickerInput" value="2330.TW"
-                       placeholder="自訂股票代碼 (如 2454.TW)">
-                <button id="searchBtn">查詢個股</button>
-                <button id="refreshBtn" class="secondary-btn" title="重新整理五大標的與即時數據">🔄 更新報價</button>
+            <div class="header-search" role="search">
+                <label for="tickerInput" class="sr-only">輸入台股或ETF代碼</label>
+                <input type="text" id="tickerInput" value="2330.TW" maxlength="15"
+                       placeholder="代碼 (如 2330.TW)" aria-label="股票或ETF代碼">
+                <button type="button" id="searchBtn" class="touch-target">查詢標的</button>
+                <button type="button" id="refreshBtn" class="secondary-btn touch-target" title="強制清除快取並重新同步報價">🔄 強制刷新</button>
             </div>
         </header>
 
-        <!-- 主內容 -->
+        <!-- 全域資料狀態與來源追蹤列 (Global Provenance Bar) -->
+        <section class="provenance-bar glass" id="globalProvenanceBar" aria-live="polite">
+            <div class="prov-item">
+                <span class="prov-label">資料快照 ID</span>
+                <strong id="provSnapshotId">--</strong>
+            </div>
+            <div class="prov-item">
+                <span class="prov-label">行情所屬交易日 (as_of)</span>
+                <strong id="provAsOfDate">--</strong>
+            </div>
+            <div class="prov-item">
+                <span class="prov-label">交易所撮合時間</span>
+                <strong id="provMarketTime">--</strong>
+            </div>
+            <div class="prov-item">
+                <span class="prov-label">市場與延遲狀態</span>
+                <strong id="provMarketStatus">--</strong>
+            </div>
+            <div class="prov-item">
+                <span class="prov-label">資料抓取 / 快取到期</span>
+                <strong id="provCacheTime">--</strong>
+            </div>
+            <div class="prov-item">
+                <span class="prov-label">資料品質檢核</span>
+                <strong id="provQualityStatus">--</strong>
+            </div>
+        </section>
+
         <main class="dashboard-grid">
 
             <!-- 0. 五大預設觀察標的即時總覽卡片列 (Watchlist Bar) -->
-            <section class="panel watchlist-panel glass">
+            <section class="panel watchlist-panel glass" aria-labelledby="watchlistHeading">
                 <div class="panel-header watchlist-header">
                     <div>
-                        <h3>🎯 五大核心觀察標的即時總覽 <span class=" watchlist-hint">（點擊任一標的卡片可切換下方深度圖表、AI 報告與單一狙擊試算）</span></h3>
+                        <h2 id="watchlistHeading" class="section-title">🎯 五大預設觀察標的總覽 <span class="watchlist-hint">（支援滑鼠點擊或鍵盤 Tab + Enter 切換深度分析與試算）</span></h2>
                     </div>
-                    <span class="badge" id="watchlistUpdateBadge">即時同步中...</span>
+                    <span class="badge" id="watchlistUpdateBadge">同步中...</span>
                 </div>
-                <div class="watchlist-grid" id="watchlistGrid">
-                    <!-- 由 app.js 動態渲染 5 張預設觀察標的卡片 -->
+                <div class="watchlist-grid" id="watchlistGrid" role="listbox" aria-label="五大預設觀察標的清單">
                     <div class="loading-spinner">
                         <div class="spinner"></div>
-                        <span>正在並行載入 2330、2308、0050、006208、009816 即時行情…</span>
+                        <span>正在載入 2330、2308、0050、006208、009816 行情與品質檢核…</span>
                     </div>
                 </div>
             </section>
 
-            <!-- 1. 核心指標卡片列 (6 張：當前選中標的 vs 0050 大盤基準) -->
-            <section class="metrics-row">
+            <!-- 1. 家庭現金保護、四階段額度狀態機與私人持股設定面板 (優先於任何技術分數) -->
+            <section class="panel household-panel glass" aria-labelledby="householdHeading">
+                <div class="panel-header">
+                    <div>
+                        <h2 id="householdHeading" class="section-title">🛡️ 家庭現金保護閘門與四階段額度管理（優先於任何技術指標分數）</h2>
+                        <p class="section-subnote">私人財務設定僅儲存在您的本機瀏覽器 (localStorage) 並透過 POST Body 運算，絕不寫入網址參數或公開頁面。未確認可動用現金時，系統強制停止產生新增買進額度。</p>
+                    </div>
+                    <span class="badge highlight-badge" id="householdGateBadge">狀態：待確認家庭現金</span>
+                </div>
+
+                <div class="household-grid">
+                    <!-- 左側：家庭現金與費用設定 -->
+                    <div class="hh-config-box">
+                        <h3 class="sub-box-title">1. 已確認家庭現金與交易成本參數</h3>
+                        <div class="hh-form-grid">
+                            <div class="calc-field">
+                                <label for="confirmedCashInput">💰 已確認可動用現金 (元) <span class="req-tag">*必填才開放額度</span></label>
+                                <input type="number" id="confirmedCashInput" placeholder="未填寫 (待確認)" min="0" max="100000000" step="1000">
+                            </div>
+                            <div class="calc-field">
+                                <label for="cashDateInput">📅 現金確認日期</label>
+                                <input type="date" id="cashDateInput" value="2026-11-05">
+                            </div>
+                            <div class="calc-field">
+                                <label for="unsettledInput">⏳ 已承諾尚未扣款金額 (元)</label>
+                                <input type="number" id="unsettledInput" value="0" min="0" step="1000">
+                            </div>
+                            <div class="calc-field">
+                                <label for="otherReservesInput">🔒 緊急預備金外之其他預留 (元)</label>
+                                <input type="number" id="otherReservesInput" value="0" min="0" step="1000">
+                            </div>
+                            <div class="calc-field">
+                                <label for="emergencyFloorInput">🛑 家庭緊急預備金底線 (元)</label>
+                                <input type="number" id="emergencyFloorInput" value="450000" min="0" step="10000">
+                                <span class="field-help">已涵蓋 9 個月 × 每月必要支出 50,000 元，不重複扣除生活費</span>
+                            </div>
+                            <div class="calc-field">
+                                <label for="minCommInput">🧾 最低手續費 (元) / 滑價 (bps)</label>
+                                <div class="inline-dual-inputs">
+                                    <input type="number" id="minCommInput" value="1" min="1" max="100" title="每筆最低手續費(元)" aria-label="每筆最低手續費(元)">
+                                    <input type="number" id="slippageBpsInput" value="0" min="0" max="200" title="滑價假設(bps)" aria-label="滑價假設(bps)">
+                                </div>
+                                <span class="field-help">左：最低手續費(預設1元，整股可設20元)｜右：滑價基點(bps)</span>
+                            </div>
+                        </div>
+
+                        <details class="private-holdings-details">
+                            <summary class="touch-target">📂 設定本機私人持股明細與集中度風險政策（供 ETF 穿透曝險計算，選填）</summary>
+                            <div class="hh-form-grid" style="margin-top: 12px;">
+                                <div class="calc-field">
+                                    <label for="hold2330">2330 台積電 持股數</label>
+                                    <input type="number" id="hold2330" placeholder="0" min="0" step="1">
+                                </div>
+                                <div class="calc-field">
+                                    <label for="hold2308">2308 台達電 持股數</label>
+                                    <input type="number" id="hold2308" placeholder="0" min="0" step="1">
+                                </div>
+                                <div class="calc-field">
+                                    <label for="hold0050">0050 元大台灣50 持股數</label>
+                                    <input type="number" id="hold0050" placeholder="0" min="0" step="1">
+                                </div>
+                                <div class="calc-field">
+                                    <label for="hold006208">006208 富邦台50 持股數</label>
+                                    <input type="number" id="hold006208" placeholder="0" min="0" step="1">
+                                </div>
+                                <div class="calc-field">
+                                    <label for="hold009816">009816 凱基TOP50 持股數</label>
+                                    <input type="number" id="hold009816" placeholder="0" min="0" step="1">
+                                </div>
+                                <div class="calc-field">
+                                    <label for="roundingModeSelect">市值取整規則</label>
+                                    <select id="roundingModeSelect">
+                                        <option value="per_holding_floor" selected>各部位分別無條件捨去至整數元 (券商慣例)</option>
+                                        <option value="exact_sum_half_up">保留小數角分精確加總</option>
+                                    </select>
+                                </div>
+                                <div class="calc-field">
+                                    <label for="maxSingleEqPct">單一標的占股票部位上限 (%)</label>
+                                    <input type="number" id="maxSingleEqPct" placeholder="未設定 (僅觀察)" min="1" max="100">
+                                </div>
+                                <div class="calc-field">
+                                    <label for="maxSingleAssetPct">單一標的占總資產上限 (%)</label>
+                                    <input type="number" id="maxSingleAssetPct" placeholder="未設定 (僅觀察)" min="1" max="100">
+                                </div>
+                            </div>
+                        </details>
+
+                        <div class="hh-btn-row">
+                            <button type="button" id="applyHouseholdBtn" class="primary-btn touch-target">💾 套用本機風險設定並重算</button>
+                            <button type="button" id="clearHouseholdBtn" class="secondary-btn touch-target">🧹 清除私人設定 (回復待確認)</button>
+                        </div>
+                    </div>
+
+                    <!-- 右側：四階段狀態機 (15,000 / 25,000 / 30,000 / 30,000) -->
+                    <div class="hh-tranche-box">
+                        <div class="tranche-box-header">
+                            <h3 class="sub-box-title">2. 四階段新增投資額度狀態機（總上限 100,000 元，含交易成本）</h3>
+                            <button type="button" id="resetTranchesBtn" class="mini-btn touch-target">重置階段狀態</button>
+                        </div>
+                        <div id="trancheSummaryBar" class="tranche-summary-bar">
+                            載入四階段狀態中...
+                        </div>
+                        <div id="trancheListContainer" class="tranche-list">
+                            <!-- 由 app.js 渲染 T1~T4 階段卡片與手動確認/延期/取消操作 -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. 核心技術指標卡片列 (6 張：明確區分 50日均線 與 60日季線) -->
+            <section class="metrics-row" aria-label="核心技術指標對照卡片">
                 <div class="metric-card glass">
-                    <span class="card-label">目前股價</span>
+                    <span class="card-label">目前收盤價</span>
                     <div class="dual-metric">
                         <div class="main-stock">
                             <span class="stock-name-label primary-label" id="mainStockLabel">2330 台積電</span>
                             <div class="card-value" id="currentPrice">--</div>
                         </div>
                         <div class="sub-stock">
-                            <span class="stock-name-label">0050 基準</span>
+                            <span class="stock-name-label">0050 對照</span>
                             <div class="card-value" id="currentPrice0050">--</div>
                         </div>
                     </div>
-                    <span class="card-sub" id="latestDate">最後更新: --</span>
+                    <span class="card-sub" id="latestDate">最後交易日: --</span>
                 </div>
+
                 <div class="metric-card glass">
-                    <span class="card-label">20MA 月線</span>
+                    <span class="card-label">20日均線 (MA20 月線)</span>
                     <div class="dual-metric">
                         <div class="main-stock">
                             <div class="card-value" id="ma20Price">--</div>
-                            <span class="card-sub" id="diff20">月線乖離 --</span>
+                            <span class="card-sub" id="diff20">乖離 --</span>
                         </div>
                         <div class="sub-stock">
                             <div class="card-value" id="ma20Price0050">--</div>
-                            <span class="card-sub" id="diff20_0050">月線乖離 --</span>
+                            <span class="card-sub" id="diff20_0050">乖離 --</span>
                         </div>
                     </div>
                 </div>
+
                 <div class="metric-card glass">
-                    <span class="card-label">50MA 季線</span>
+                    <span class="card-label">50日均線 (MA50) / 60日季線 (MA60)</span>
                     <div class="dual-metric">
                         <div class="main-stock">
                             <div class="card-value" id="ma50Price">--</div>
-                            <span class="card-sub" id="diff50">季線乖離 --</span>
+                            <span class="card-sub" id="diff50">50MA乖離 --</span>
+                            <span class="card-sub" id="ma60Info">60MA(季線): --</span>
                         </div>
                         <div class="sub-stock">
                             <div class="card-value" id="ma50Price0050">--</div>
-                            <span class="card-sub" id="diff50_0050">季線乖離 --</span>
+                            <span class="card-sub" id="diff50_0050">50MA乖離 --</span>
                         </div>
                     </div>
                 </div>
+
                 <div class="metric-card glass">
-                    <span class="card-label">RSI-14（Wilder）</span>
+                    <span class="card-label">Wilder RSI-14 (14期平滑)</span>
                     <div class="dual-metric">
                         <div class="main-stock">
                             <div class="card-value" id="rsiValue">--</div>
-                            <span class="card-sub" id="rsiLabel">14日 Wilder 標準計算</span>
+                            <span class="card-sub" id="rsiLabel">Wilder 標準計算</span>
                         </div>
                         <div class="sub-stock">
                             <div class="card-value" id="rsiValue0050">--</div>
@@ -107,10 +252,11 @@
                         </div>
                     </div>
                 </div>
+
                 <div class="metric-card glass score-gauge-card" id="statusCardMain">
-                    <span class="card-label" id="scoreCardTitleMain">2330 加碼評分</span>
+                    <span class="card-label" id="scoreCardTitleMain">2330 規則偏離分</span>
                     <div class="score-ring-container">
-                        <svg class="score-ring" viewBox="0 0 100 100">
+                        <svg class="score-ring" viewBox="0 0 100 100" aria-hidden="true">
                             <circle class="score-ring-bg" cx="50" cy="50" r="45"></circle>
                             <circle class="score-ring-path" id="scoreRingPathMain" cx="50" cy="50" r="45"></circle>
                         </svg>
@@ -119,15 +265,16 @@
                             <span class="score-max">/100</span>
                         </div>
                     </div>
-                    <div class="signal-light-row" style="justify-content: center; margin-top: 5px;">
-                        <span id="signalLightMain" style="font-size: 16px;">⏳</span>
-                        <div class="status-text" id="statusTextMain" style="font-size: 13px;">讀取中...</div>
+                    <div class="signal-light-row">
+                        <span id="signalLightMain">⏳</span>
+                        <div class="status-text" id="statusTextMain">讀取中...</div>
                     </div>
                 </div>
+
                 <div class="metric-card glass score-gauge-card" id="statusCard0050">
-                    <span class="card-label">0050 大盤評分</span>
+                    <span class="card-label">0050 規則偏離分</span>
                     <div class="score-ring-container">
-                        <svg class="score-ring" viewBox="0 0 100 100">
+                        <svg class="score-ring" viewBox="0 0 100 100" aria-hidden="true">
                             <circle class="score-ring-bg" cx="50" cy="50" r="45"></circle>
                             <circle class="score-ring-path" id="scoreRingPath0050" cx="50" cy="50" r="45"></circle>
                         </svg>
@@ -136,125 +283,160 @@
                             <span class="score-max">/100</span>
                         </div>
                     </div>
-                    <div class="signal-light-row" style="justify-content: center; margin-top: 5px;">
-                        <span id="signalLight0050" style="font-size: 16px;">⏳</span>
-                        <div class="status-text" id="statusText0050" style="font-size: 13px;">讀取中...</div>
+                    <div class="signal-light-row">
+                        <span id="signalLight0050">⏳</span>
+                        <div class="status-text" id="statusText0050">讀取中...</div>
                     </div>
                 </div>
             </section>
 
-            <!-- 2. 市場情緒雷達 -->
-            <section class="panel sentiment-panel glass">
+            <!-- 3. 市場情緒正交三因子雷達 -->
+            <section class="panel sentiment-panel glass" aria-labelledby="sentimentHeading">
                 <div class="panel-header">
-                    <h3>🌍 全球與台股市場情緒雷達 (納入加碼評分權重 -15 ~ +20 分)</h3>
+                    <h2 id="sentimentHeading" class="section-title">🌍 跨市場情緒正交三因子雷達（消除 SOX 與 TSM ADR 重複加權，範圍 -10 ~ +10 分）</h2>
                     <span class="badge" id="sentimentSummaryBadge">載入中...</span>
                 </div>
                 <div id="sentimentContent" class="sentiment-content">
                     <div class="loading-spinner">
                         <div class="spinner"></div>
-                        <span>載入費半、ADR、日韓股、匯率與三大法人數據中...</span>
+                        <span>載入費半、ADR、日韓股、USD/TWD 匯率與證交所三大法人明細中...</span>
                     </div>
                 </div>
             </section>
 
-            <!-- 3. 圖表 + AI 報告雙欄 -->
+            <!-- 4. 圖表 + 確定性規則評估報告雙欄 -->
             <section class="main-content-row">
                 <!-- 左欄：三層圖表（價格 + 成交量 + RSI） -->
                 <div class="panel chart-panel glass">
                     <div class="panel-header">
-                        <h3>📊 歷史走勢 / 20MA月線 / 50MA季線 / 布林通道 / RSI</h3>
+                        <h2 class="section-title">📊 歷史收盤走勢 / MA20 / MA50 / MA60 / 布林通道 / RSI-14</h2>
                         <span class="badge" id="chartBadge">2330.TW</span>
                     </div>
-                    <!-- 主圖：收盤價 + 20MA + 50MA + 布林通道 -->
-                    <div class="chart-container" style="height: 265px;">
+                    <div class="chart-container" style="height: 255px;">
                         <canvas id="stockChart"></canvas>
                     </div>
-                    <!-- 成交量子圖 -->
-                    <div class="chart-sublabel">📦 成交量 (紅漲綠跌)</div>
+                    <div class="chart-sublabel" id="volumeSubLabel">📦 成交量（Yahoo 一般交易＋盤中零股；不含盤後定價/盤後零股/鉅額）</div>
                     <div class="chart-container" style="height: 65px;">
                         <canvas id="volumeChart"></canvas>
                     </div>
-                    <!-- RSI 子圖 -->
-                    <div class="chart-sublabel">📈 RSI-14 <span class="rsi-legend"><span style="color:#ef4444">■</span> 30 超賣買點  <span style="color:#f59e0b">■</span> 70 超買警戒</span></div>
+                    <div class="chart-sublabel">📈 Wilder RSI-14 <span class="rsi-legend"><span style="color:#ef4444">■</span> 30 超賣條件  <span style="color:#f59e0b">■</span> 70 超買條件</span></div>
                     <div class="chart-container" style="height: 80px;">
                         <canvas id="rsiChart"></canvas>
                     </div>
                 </div>
 
-                <!-- 右欄：AI 智慧報告 -->
+                <!-- 右欄：確定性規則評估報告與計分拆解 -->
                 <div class="panel ai-panel glass">
                     <div class="panel-header">
-                        <h3>🤖 AI 專屬加碼策略 & 乖離率分層建議</h3>
-                        <span class="badge highlight-badge" id="aiTargetTag">AI 晶圓代工龍頭</span>
+                        <h2 class="section-title">📋 確定性規則評估摘要 & 可重現計分拆解</h2>
+                        <span class="badge highlight-badge" id="aiTargetTag">rule-v6.0.0</span>
                     </div>
                     <div class="ai-content" id="aiReportBox">
                         <div class="loading-spinner">
                             <div class="spinner"></div>
-                            <span>載入 AI 評估報告中...</span>
+                            <span>載入規則評估報告中...</span>
                         </div>
                     </div>
+                    <div id="scoreBreakdownBox" class="score-breakdown-box"></div>
                 </div>
             </section>
 
-            <!-- 4. 自選 / 多標的動態零股加碼試算器 -->
-            <section class="panel allocation-panel glass">
+            <!-- 5. 受家庭風險保護之零股試算器 -->
+            <section class="panel allocation-panel glass" aria-labelledby="allocHeading">
                 <div class="panel-header">
-                    <h3>💎 智慧零股加碼試算器 (支援單一標的狙擊 & 五大標的動態配重)</h3>
+                    <h2 id="allocHeading" class="section-title">🧮 零股配置與交易成本試算器（含手續費、最低手續費、滑價與家庭現金底線檢核）</h2>
                     <span class="badge highlight-badge" id="allocActiveBadge">當前試算標的：2330 台積電</span>
                 </div>
-                <div class="calc-control-row calc-control-4col">
+                <div class="calc-control-row">
                     <div class="calc-field">
-                        <label for="budgetInput">💡 擬投入預備金總額 (NTD)</label>
-                        <input type="number" id="budgetInput" value="30000" min="1000" step="1000">
+                        <label for="budgetInput">💡 本次擬試算金額上限 (NTD，0代表不投入)</label>
+                        <input type="number" id="budgetInput" value="15000" min="0" max="50000000" step="1000">
                     </div>
                     <div class="calc-field">
-                        <label for="strategySelect">🧭 試算標的策略模式</label>
+                        <label for="strategySelect">🧭 試算標的範圍模式</label>
                         <select id="strategySelect">
-                            <option value="single_target" selected>🎯 單一標的 100% 集中狙擊（跟隨目前點選標的）</option>
-                            <option value="smart_all">🌐 五大觀察標的智慧配重（評分 ≥ 40 依強度自動分配）</option>
-                            <option value="stocks_only">⚡ 雙龍頭個股專攻（2330 台積電 + 2308 台達電，ETF 純定投）</option>
+                            <option value="single_target" selected>🎯 單一標的試算（跟隨目前選中標的）</option>
+                            <option value="smart_all">🌐 五大觀察標的規則分數比例試算（非風險平價）</option>
+                            <option value="stocks_only">⚡ 雙權值個股試算（2330 台積電 + 2308 台達電）</option>
                         </select>
                     </div>
                     <div class="calc-field">
-                        <label for="modeSelect">🎯 加碼分批比例</label>
+                        <label for="modeSelect">🎯 階段 / 分批模式</label>
                         <select id="modeSelect">
-                            <option value="single" selected>🚀 單次即刻加碼（100% 預算進場）</option>
-                            <option value="tranche2">⚖️ 二階段分批（首批 50% 進場，50% 預留）</option>
-                            <option value="tranche3">🛡️ 三階段鐵板（首批 33% 進場，67% 預留）</option>
+                            <option value="single" selected>📌 依目前開放階段上限試算 (預設 T1: 15,000)</option>
+                            <option value="tranche1">階段一 T1 試算 (上限 15,000 元含費用)</option>
+                            <option value="tranche2">二階段 50% 分批試算</option>
+                            <option value="tranche3">三階段 33.3% 分批試算</option>
+                            <option value="tranche4">階段四 T4 試算 (上限 30,000 元，須人工覆核)</option>
                         </select>
                     </div>
                     <div class="calc-field btn-field">
-                        <button id="calcBtn">立即試算零股股數</button>
+                        <button type="button" id="calcBtn" class="touch-target">執行試算與風險檢核</button>
                     </div>
                 </div>
                 <div class="calc-results-grid" id="calcResultsBox">
                     <div class="loading-spinner">
                         <div class="spinner"></div>
-                        <span>計算最佳零股股數與資金配置中...</span>
+                        <span>計算零股股數、手續費與家庭現金底線中...</span>
                     </div>
                 </div>
             </section>
 
-            <!-- 5. 五大核心觀察標的投資策略指南 -->
-            <section class="panel info-panel glass">
+            <!-- 6. ETF 穿透曝險與加碼前後集中度比較面板 -->
+            <section class="panel exposure-panel glass" aria-labelledby="exposureHeading">
                 <div class="panel-header">
-                    <h3>🧭 五大核心觀察標的定位與長線配置指南</h3>
+                    <div>
+                        <h2 id="exposureHeading" class="section-title">🔬 直接持股 ＋ 三檔 ETF (0050 / 006208 / 009816) 穿透曝險與集中度分析</h2>
+                        <p class="section-subnote">個股穿透金額 ＝ 直接持股市值 ＋ 各 ETF 市值 × 官方成分股權重（0050 與 006208 追蹤臺灣50指數；009816 追蹤特選臺灣TOP50指數，權重獨立不複製）。</p>
+                    </div>
+                    <span class="badge" id="exposureStatusBadge">穿透分析</span>
+                </div>
+                <div id="exposureContentBox">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>載入 ETF 官方成分股權重與穿透曝險表中...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 7. 時間序列回測與樣本外驗證面板 -->
+            <section class="panel backtest-panel glass" aria-labelledby="backtestHeading">
+                <div class="panel-header">
+                    <div>
+                        <h2 id="backtestHeading" class="section-title">📈 時間序列回測與四大基準對照（次一交易日含成本成交，零前視偏誤）</h2>
+                        <p class="section-subnote">對照「不新增投資」「期初買入持有」「定期定額」「四階段規則分批」，誠實揭露最大回撤、持現比例、未成交筆數與落後基準情境。</p>
+                    </div>
+                    <span class="badge" id="backtestTickerBadge">2330.TW</span>
+                </div>
+                <div id="backtestContentBox">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>執行時間序列回測與樣本外驗證中...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 8. 資料來源、成交量對帳與研究方法規格說明 -->
+            <section class="panel info-panel glass" aria-labelledby="methodologyHeading">
+                <div class="panel-header">
+                    <h2 id="methodologyHeading" class="section-title">📚 資料來源契約、證交所成交量對帳與指標規格說明</h2>
                 </div>
                 <div class="strategy-guide-grid">
                     <div class="step-box">
-                        <span class="guide-tag tag-stock">龍頭個股</span>
-                        <h4>2330 台積電 & 2308 台達電</h4>
-                        <p>分別掌握「AI 先進製程晶圓代工」與「AI 伺服器電源與液冷散熱」雙核心護城河。波動彈性較市值型 ETF 大，最適合在<strong>股價跌破 20MA 月線或 50MA 季線（評分 ≥ 40 分）</strong>時，動用預備金分批買進零股壓低成本。</p>
+                        <span class="guide-tag tag-stock">成交量精確對帳 (2026-11-05 實證)</span>
+                        <h4>Yahoo 成交量 vs 證交所 STOCK_DAY 官方總成交量</h4>
+                        <p>Yahoo Finance <code>v8/chart</code> 的成交量僅統計 <strong>09:00–13:30 一般交易（整股＋盤中零股）</strong>；證交所 <code>STOCK_DAY</code> / <code>MI_INDEX</code> 則包含<strong>一般交易＋14:30 盤後定價 (BFT41U)＋14:30 盤後零股 (TWT53U)＋鉅額交易 (BFIAUU)</strong>。</p>
+                        <p>以 <strong>2026-11-05 台積電 (2330)</strong> 為例：Yahoo 為 <code>41,159,867</code> 股 ＋ 盤後定價 <code>148,000</code> 股 ＋ 盤後零股 <code>278,278</code> 股 ＋ 鉅額交易 <code>3,589,000</code> 股 ＝ <strong><code>45,175,145</code> 股（與證交所官方總量差額 0 股）</strong>。</p>
                     </div>
                     <div class="step-box">
-                        <span class="guide-tag tag-etf">經典市值型 ETF</span>
-                        <h4>0050 元大台灣50 & 006208 富邦台50</h4>
-                        <p>追蹤臺灣 50 指數，涵蓋台股前 50 大權值企業，具備自動汰弱留強機制。<strong>0050</strong> 規模與流動性居冠，<strong>006208</strong> 則具備較低經理費優勢，兩者皆是每月<strong>定期定額</strong>參與台股長線成長的標準配備。</p>
+                        <span class="guide-tag tag-etf">均線、Wilder RSI-14 與布林通道規格</span>
+                        <h4>MA20 / MA50 / MA60 與邊界處理</h4>
+                        <p><strong>MA20 (月線)</strong>、<strong>MA50 (50日均線)</strong>、<strong>MA60 (60日季線)</strong> 皆嚴格取排序去重後最後 N 個有效交易日收盤價平均，以未取整原始精度計算乖離率。<strong>Wilder RSI-14</strong> 採前 14 筆變動平均為種子、後續 1/14 平滑；全漲=100、全跌=0、全平=50(中性非買點)、少於15筆=資料不足不發訊號。</p>
                     </div>
                     <div class="step-box">
-                        <span class="guide-tag tag-compound">不配息複利型 ETF</span>
-                        <h4>009816 凱基台灣TOP50</h4>
-                        <p>追蹤特選臺灣 TOP 50 指數，最大特色為<strong>「不配息、股息自動滾入淨值再投資」</strong>，加上極低經理費（約 0.07%），能免除股利所得稅、二代健保補充保費與手動再投入的摩擦成本，發揮極致複利效應。</p>
+                        <span class="guide-tag tag-compound">ETF 費用、配息與稅務法規揭露</span>
+                        <h4>0050 / 006208 / 009816 官方公開說明書基準</h4>
+                        <p><strong>0050</strong> 與 <strong>006208</strong> 追蹤臺灣50指數（半年配息，台積電權重約 58.87% / 57.80%）；<strong>009816</strong> 追蹤特選臺灣TOP50指數（2026年2月掛牌，台積電權重約 40.66%，採股息自動滾入淨值不配息設計）。國內成分股現金股利課稅與二代健保補充保費依投資人個人綜所稅率級距與現行法規適用，無永久免稅或保證報酬。</p>
                     </div>
                 </div>
             </section>

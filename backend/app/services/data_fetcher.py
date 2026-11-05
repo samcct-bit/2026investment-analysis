@@ -1,14 +1,35 @@
+"""
+data_fetcher.py — 市場資料獲取、快取管理、TWSE 官方對照與完整 Provenance 封裝服務 (V6.0)
+"""
+
+from __future__ import annotations
 import re
 import time
+import uuid
 import concurrent.futures
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from typing import Any, Dict, List, Optional
 import requests
-import pandas as pd
-import numpy as np
 
-# ── 預設五大核心觀察標的與股票字典 ──────────────────────────────
+from app.core.indicators import (
+    DataQualityError,
+    compute_full_technical_snapshot,
+    round_twd,
+)
+from app.core.market_time import (
+    TZ_TAIPEI,
+    build_provenance_envelope,
+)
+from app.core.scoring import (
+    MODEL_VERSION,
+    compute_explainable_score,
+    compute_sentiment_breakdown,
+)
+
 DEFAULT_WATCHLIST = ["2330.TW", "2308.TW", "0050.TW", "006208.TW", "009816.TW"]
 
-STOCK_NAMES = {
+STOCK_NAMES: Dict[str, str] = {
     "2330": "台積電",
     "2308": "台達電",
     "0050": "元大台灣50",
@@ -27,68 +48,98 @@ STOCK_NAMES = {
     "00757": "統一FANG+",
 }
 
-STOCK_META = {
+STOCK_META: Dict[str, Dict[str, str]] = {
     "2330": {
-        "category": "龍頭個股",
-        "tag": "AI 晶圓代工龍頭",
+        "category": "上市個股",
+        "tag": "半導體晶圓代工",
         "type": "stock",
-        "desc": "全球先進製程與 AI 算力核心獨佔龍頭，適合備妥預備金於月線/季線乖離拉大時分批逢低狙擊。"
+        "sector": "半導體業",
+        "desc": "臺灣證券交易所上市普通股（代碼 2330）。同時為 0050、006208、009816 最大權重成分股，加碼前須檢視 ETF 穿透後之單一標的總曝險。",
     },
     "2308": {
-        "category": "龍頭個股",
-        "tag": "AI 電源與散熱龍頭",
+        "category": "上市個股",
+        "tag": "電源與散熱系統",
         "type": "stock",
-        "desc": "AI 伺服器電源供應器、液冷散熱與電動車能源管理核心大廠，兼具成長動能與穩健體質。"
+        "sector": "電子零組件業",
+        "desc": "臺灣證券交易所上市普通股（代碼 2308）。同時為三檔市值型 ETF 前十大成分股（權重約 2.34%~2.47%）。",
     },
     "0050": {
         "category": "市值型 ETF",
-        "tag": "台股大盤標竿",
+        "tag": "追蹤臺灣50指數 (半年配)",
         "type": "etf",
-        "desc": "追蹤台灣前 50 大市值企業，最具代表性的大盤市值型 ETF，適合長期定期定額核心配置。"
+        "sector": "市值型ETF",
+        "desc": "元大台灣卓越50基金（代碼 0050），追蹤臺灣50指數，台積電權重約 58.87%（2026-11-03 元大投信官網）。採半年配息，配息課稅依個人綜所稅級距與二代健保規定適用。",
     },
     "006208": {
         "category": "市值型 ETF",
-        "tag": "低內扣市值 ETF",
+        "tag": "追蹤臺灣50指數 (半年配)",
         "type": "etf",
-        "desc": "追蹤同台灣 50 指數，具備低經理費內扣優勢，適合長線存股族定期定額與大跌加碼。"
+        "sector": "市值型ETF",
+        "desc": "富邦台灣采吉50基金（代碼 006208），追蹤同臺灣50指數，台積電權重約 57.80%（2026-11-03 富邦投信官網）。經理費 0.15%＋保管費 0.035%。",
     },
     "009816": {
         "category": "市值型 ETF",
-        "tag": "不配息複利滾存",
+        "tag": "特選臺灣TOP50 (不配息滾入)",
         "type": "etf",
-        "desc": "追蹤特選臺灣 TOP 50 指數，採「股息自動滾入淨值不配息」機制，省去股利稅與二代健保，極大化長線複利效應。"
-    }
+        "sector": "市值型ETF",
+        "desc": "凱基台灣TOP 50 ETF基金（代碼 009816，2026年2月掛牌），追蹤臺灣指數公司特選臺灣TOP 50指數，台積電權重約 40.66%（與臺灣50指數不同）。依公開說明書採不分配收益設計，股息滾入淨值。",
+    },
 }
 
-_STOCK_CACHE = {}
-_SENTIMENT_CACHE = {"ts": 0, "data": None}
-STOCK_CACHE_TTL = 60
-SENTIMENT_CACHE_TTL = 180
+# ── 快取結構 (支援 force_refresh 強制清除與明確到期時間) ──────────────────
+_RAW_SERIES_CACHE: Dict[str, Dict[str, Any]] = {}
+_SENTIMENT_CACHE: Dict[str, Any] = {"ts": 0.0, "data": None}
+STOCK_CACHE_TTL = 60       # 股價序列快取 60 秒
+SENTIMENT_CACHE_TTL = 180  # 市場情緒快取 180 秒
 
 
-def normalize_ticker(ticker_symbol: str) -> str:
+def clear_all_caches() -> None:
+    """手動刷新或測試時清除所有快取，確保不殘留過期 0050 或個股快取"""
+    _RAW_SERIES_CACHE.clear()
+    _SENTIMENT_CACHE["ts"] = 0.0
+    _SENTIMENT_CACHE["data"] = None
+
+
+def validate_ticker_symbol(ticker_symbol: str) -> str:
+    """
+    嚴格驗證股票代碼格式（白名單正則）：
+    僅允許 2~10 位英數字，可選後綴 .TW 或 .TWO，拒絕超長字串、特殊字元或腳本注入。
+    """
+    if not isinstance(ticker_symbol, str):
+        raise ValueError("股票代碼必須為字串")
     t = ticker_symbol.strip().upper()
-    if not t.endswith(".TW") and not t.endswith(".TWO") and re.match(r'^[0-9A-Z]+$', t):
+    if not t or len(t) > 15:
+        raise ValueError("股票代碼長度無效（限 1～15 字元）")
+    if not re.match(r"^[0-9A-Z]{2,10}(\.(TW|TWO))?$", t):
+        raise ValueError(f"無效的股票代碼格式：{ticker_symbol}")
+    if not t.endswith(".TW") and not t.endswith(".TWO"):
         t += ".TW"
     return t
 
 
-def fetch_via_yahoo_api(symbol="2330.TW", use_cache=True):
+def fetch_via_yahoo_api(symbol: str = "2330.TW", use_cache: bool = True, force_refresh: bool = False) -> Optional[Dict[str, Any]]:
+    """
+    透過 Yahoo Finance HTTP Chart API v8 取得歷史日 K 線與 meta 報價。
+    回傳包含 records, meta, fetched_at_ts, cached_at_ts, is_meta_appended 之完整字典。
+    """
     now = time.time()
-    if use_cache and symbol in _STOCK_CACHE:
-        ts, cached_df = _STOCK_CACHE[symbol]
-        if now - ts < STOCK_CACHE_TTL:
-            return cached_df.copy()
+    if not force_refresh and use_cache and symbol in _RAW_SERIES_CACHE:
+        entry = _RAW_SERIES_CACHE[symbol]
+        if now - entry["cached_at_ts"] < STOCK_CACHE_TTL:
+            return {
+                **entry,
+                "records": [dict(r) for r in entry["records"]],
+            }
 
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=3mo"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=6mo"
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
     }
     try:
-        res = requests.get(url, headers=headers, timeout=8)
+        res = requests.get(url, headers=headers, timeout=6)
         if res.status_code != 200:
             return None
 
@@ -100,264 +151,234 @@ def fetch_via_yahoo_api(symbol="2330.TW", use_cache=True):
         meta = result[0].get("meta", {})
         timestamps = result[0].get("timestamp", [])
         indicators = result[0].get("indicators", {}).get("quote", [{}])[0]
-        closes  = indicators.get("close", [])
+        opens = indicators.get("open", [])
+        closes = indicators.get("close", [])
         volumes = indicators.get("volume", [])
 
         if not timestamps or not closes:
             return None
 
-        records = []
-        for ts, c, v in zip(timestamps, closes, volumes):
-            if c is not None and not np.isnan(c):
-                dt_str = pd.to_datetime(ts, unit='s').strftime("%Y-%m-%d")
-                records.append({"Date": dt_str, "Close": float(c), "Volume": int(v) if v else 0})
+        # 決定交易所時區以正確轉換交易日期 (避免台北與紐約跨日偏差)
+        tz_for_date = TZ_TAIPEI
+        records: List[Dict[str, Any]] = []
+        for idx, ts in enumerate(timestamps):
+            c = closes[idx] if idx < len(closes) else None
+            o = opens[idx] if idx < len(opens) else None
+            v = volumes[idx] if idx < len(volumes) else 0
+            if c is not None and isinstance(c, (int, float)) and not (c != c):  # not NaN
+                dt_str = datetime.fromtimestamp(ts, tz=tz_for_date).strftime("%Y-%m-%d")
+                records.append({
+                    "Date": dt_str,
+                    "Open": float(o) if (o is not None and o == o and o > 0) else float(c),
+                    "Close": float(c),
+                    "Volume": int(v) if (v is not None and v == v and v >= 0) else 0,
+                })
 
-        if meta.get("regularMarketTime") and meta.get("regularMarketPrice"):
-            latest_dt_str = pd.to_datetime(meta["regularMarketTime"], unit='s').strftime("%Y-%m-%d")
+        is_meta_appended = False
+        mkt_ts = meta.get("regularMarketTime")
+        mkt_price = meta.get("regularMarketPrice")
+        if mkt_ts and mkt_price and mkt_price > 0:
+            latest_dt_str = datetime.fromtimestamp(int(mkt_ts), tz=tz_for_date).strftime("%Y-%m-%d")
             if not records or records[-1]["Date"] != latest_dt_str:
                 records.append({
                     "Date": latest_dt_str,
-                    "Close": float(meta["regularMarketPrice"]),
-                    "Volume": int(meta.get("regularMarketVolume", 0))
+                    "Open": float(meta.get("regularMarketOpen") or mkt_price),
+                    "Close": float(mkt_price),
+                    "Volume": int(meta.get("regularMarketVolume") or 0),
                 })
+                is_meta_appended = True
 
         if not records:
             return None
 
-        df = pd.DataFrame(records)
-        df = df.drop_duplicates(subset=["Date"], keep="last")
-        df.set_index("Date", inplace=True)
-        _STOCK_CACHE[symbol] = (now, df.copy())
-        return df
+        payload = {
+            "symbol": symbol,
+            "records": records,
+            "meta": meta,
+            "market_ts": int(mkt_ts) if mkt_ts else None,
+            "fetched_at_ts": now,
+            "cached_at_ts": now,
+            "is_meta_appended": is_meta_appended,
+        }
+        _RAW_SERIES_CACHE[symbol] = payload
+        return payload
 
     except Exception as e:
         print(f"Yahoo HTTP API Fetch Error for {symbol}: {e}")
         return None
 
 
-def compute_indicators(df):
-    """計算所有技術指標：20MA、50MA、布林通道、Wilder RSI-14"""
-    df["20MA"]  = df["Close"].rolling(window=20, min_periods=5).mean()
-    df["50MA"]  = df["Close"].rolling(window=50, min_periods=10).mean()
-    df["Std20"] = df["Close"].rolling(window=20, min_periods=5).std()
-    df["UpperBand"] = df["20MA"] + (df["Std20"] * 2)
-    df["LowerBand"] = df["20MA"] - (df["Std20"] * 2)
+def fetch_twse_institutional_details() -> Optional[Dict[str, Any]]:
+    """
+    向臺灣證券交易所官方端點 (BFI82U) 取得三大法人買賣超金額明細。
+    明確揭露：
+    - 資料日期 (as_of_date)
+    - 市場範圍：臺灣證券交易所集中市場（上市，不含櫃買中心上櫃）
+    - 單位：新台幣元 (TWD)
+    - 細項拆解：自營商(自行買賣)、自營商(避險)、投信、外資及陸資(不含外資自營商)、外資自營商
+    - 確認「合計」列並未重複計入外資自營商（外資自營商已包含於自營商自行買賣中，證交所官方合計列即為三大法人不重複加總）。
+    """
+    try:
+        res = requests.get("https://www.twse.com.tw/rwd/zh/fund/BFI82U?response=json", timeout=4)
+        if res.status_code != 200:
+            return None
+        data = res.json()
+        if data.get("stat") != "OK" or not data.get("data"):
+            return None
 
-    delta    = df["Close"].diff()
-    gain     = delta.where(delta > 0, 0.0)
-    loss     = -delta.where(delta < 0, 0.0)
-    avg_gain = gain.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
-    avg_loss = avg_loss.replace(0, 1e-10)
-    rs       = avg_gain / avg_loss
-    df["RSI"] = 100 - (100 / (1 + rs))
+        raw_date = str(data.get("date", ""))
+        as_of_date = (
+            f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
+            if len(raw_date) == 8 and raw_date.isdigit()
+            else raw_date
+        )
 
-    return df
+        rows_parsed: List[Dict[str, Any]] = []
+        total_net_buy_twd: Optional[int] = None
+        for row in data["data"]:
+            if len(row) < 4:
+                continue
+            name = str(row[0]).strip()
+            buy_val = int(str(row[1]).replace(",", "").strip() or "0")
+            sell_val = int(str(row[2]).replace(",", "").strip() or "0")
+            diff_val = int(str(row[3]).replace(",", "").strip() or "0")
+            if "合計" in name:
+                total_net_buy_twd = diff_val
+            else:
+                rows_parsed.append({
+                    "category": name,
+                    "buy_twd": buy_val,
+                    "sell_twd": sell_val,
+                    "net_diff_twd": diff_val,
+                })
 
+        if total_net_buy_twd is None and rows_parsed:
+            # 若無合計列，排除「外資自營商」避免與「自營商(自行買賣)」重複計算
+            total_net_buy_twd = sum(
+                r["net_diff_twd"] for r in rows_parsed if "外資自營商" not in r["category"]
+            )
 
-def fetch_market_sentiment():
-    now = time.time()
-    if _SENTIMENT_CACHE["data"] is not None and (now - _SENTIMENT_CACHE["ts"] < SENTIMENT_CACHE_TTL):
-        return _SENTIMENT_CACHE["data"]
-
-    score = 0
-    details = {}
-
-    symbols = {"sox": "^SOX", "tsm_adr": "TSM", "n225": "^N225", "ks11": "^KS11", "usdtwd": "USDTWD=X"}
-
-    def fetch_sym(key, sym):
-        try:
-            df = fetch_via_yahoo_api(sym)
-            if df is not None and len(df) >= 2:
-                latest = float(df.iloc[-1]["Close"])
-                prev = float(df.iloc[-2]["Close"])
-                pct = (latest - prev) / prev * 100
-                return key, {"price": round(latest, 2), "pct_change": round(pct, 2)}
-        except Exception:
-            pass
-        return key, None
-
-    def fetch_twse_inst():
-        try:
-            res = requests.get("https://www.twse.com.tw/fund/BFI82U?response=json", timeout=3)
-            if res.status_code == 200:
-                data = res.json()
-                if data.get("data"):
-                    total_net_buy = 0
-                    for row in data["data"]:
-                        if "合計" in row[0]:
-                            total_net_buy = int(row[3].replace(',', ''))
-                            break
-                    if total_net_buy == 0 and len(data["data"]) > 0:
-                        total_net_buy = int(data["data"][-1][3].replace(',', ''))
-                    return "institutional", total_net_buy
-        except Exception:
-            pass
-        return "institutional", None
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-        futures = [executor.submit(fetch_sym, k, s) for k, s in symbols.items()]
-        futures.append(executor.submit(fetch_twse_inst))
-
-        for future in concurrent.futures.as_completed(futures):
-            k, v = future.result()
-            details[k] = v
-
-    details["margin"] = None
-
-    if details.get("sox"):
-        pct = details["sox"]["pct_change"]
-        if pct > 2: score += 4
-        elif pct > 0: score += 2
-        elif pct < -2: score -= 4
-        elif pct < 0: score -= 2
-
-    if details.get("tsm_adr"):
-        pct = details["tsm_adr"]["pct_change"]
-        if pct > 2: score += 4
-        elif pct > 0: score += 2
-        elif pct < -2: score -= 4
-        elif pct < 0: score -= 2
-
-    if details.get("n225"):
-        pct = details["n225"]["pct_change"]
-        if pct > 1: score += 2
-        elif pct < -1: score -= 2
-
-    if details.get("ks11"):
-        pct = details["ks11"]["pct_change"]
-        if pct > 1: score += 2
-        elif pct < -1: score -= 2
-
-    if details.get("usdtwd"):
-        pct = details["usdtwd"]["pct_change"]
-        if pct > 0.3: score -= 2
-        elif pct < -0.3: score += 2
-
-    inst = details.get("institutional")
-    if inst is not None:
-        score += max(-4, min(4, int(inst / 10_000_000_000)))
-
-    score = max(-15, min(20, score))
-    res_obj = {"score": score, "details": details}
-    _SENTIMENT_CACHE["ts"] = now
-    _SENTIMENT_CACHE["data"] = res_obj
-    return res_obj
-
-
-def compute_accumulation_score(price, ma_20, ma_50, rsi, sentiment_score=0):
-    """計算加碼強度評分 (0~100)"""
-    score = 0
-
-    diff_20_pct = ((price - ma_20) / ma_20) * 100 if ma_20 else 0
-    if diff_20_pct > 0:
-        score += 0
-    elif diff_20_pct > -3:
-        score += 12
-    elif diff_20_pct > -7:
-        score += 25
-    elif diff_20_pct > -12:
-        score += 37
-    elif diff_20_pct > -18:
-        score += 45
-    else:
-        score += 50
-
-    if rsi > 60:
-        score += 0
-    elif rsi > 50:
-        score += 5
-    elif rsi > 40:
-        score += 10
-    elif rsi > 30:
-        score += 20
-    elif rsi > 20:
-        score += 27
-    else:
-        score += 30
-
-    diff_50_pct = ((price - ma_50) / ma_50) * 100 if ma_50 else 0
-    if diff_50_pct > 0:
-        score += 0
-    elif diff_50_pct > -5:
-        score += 10
-    elif diff_50_pct > -10:
-        score += 15
-    else:
-        score += 20
-
-    score += sentiment_score
-    score = max(0, min(100, score))
-
-    if score <= 20:
-        level, emoji, text, action, color = "blue", "⏸️", "定期定額區", "維持月定投，不動用預備金", "#3b82f6"
-    elif score <= 40:
-        level, emoji, text, action, color = "cyan", "⚡", "輕度加碼機會", "動用預備金 15%", "#06b6d4"
-    elif score <= 60:
-        level, emoji, text, action, color = "green", "🟢", "良好加碼機會", "動用預備金 33%", "#10b981"
-    elif score <= 80:
-        level, emoji, text, action, color = "orange", "💪", "強力加碼機會", "動用預備金 60%", "#f59e0b"
-    else:
-        level, emoji, text, action, color = "red", "🔥", "歷史性買點", "動用預備金 85%，全力建倉", "#ef4444"
-
-    return {
-        "score": score,
-        "level": level,
-        "emoji": emoji,
-        "text": text,
-        "action": action,
-        "color": color
-    }
-
-
-def get_stock_analysis(ticker_symbol="2330.TW", period="60d", include_sentiment=True):
-    ticker_clean = normalize_ticker(ticker_symbol)
-    df = fetch_via_yahoo_api(ticker_clean)
-    if df is None or df.empty:
+        return {
+            "provider": "臺灣證券交易所 (TWSE BFI82U 官方端點)",
+            "source_url": "https://www.twse.com.tw/zh/trading/foreign/bfi82u.html",
+            "as_of_date": as_of_date,
+            "market_scope": "上市集中市場（不含上櫃 OTC）",
+            "unit": "新台幣元 (TWD)",
+            "dedup_note": "採用證交所官方『合計』列，已排除『外資自營商』與『自營商(自行買賣)』之重複計算。",
+            "total_net_buy_twd": total_net_buy_twd,
+            "total_net_buy_billion_twd": round(total_net_buy_twd / 100_000_000.0, 2) if total_net_buy_twd is not None else None,
+            "breakdown": rows_parsed,
+        }
+    except Exception:
         return None
 
-    df = compute_indicators(df)
-    latest = df.iloc[-1]
-    prev = df.iloc[-2] if len(df) >= 2 else latest
 
-    def safe(v, default=0.0):
-        return round(float(v), 2) if not pd.isna(v) else default
+def fetch_market_sentiment(force_refresh: bool = False) -> Dict[str, Any]:
+    """並行抓取全球與台股宏觀情緒指標，並透過正交三因子模型計算明細"""
+    now = time.time()
+    if not force_refresh and _SENTIMENT_CACHE["data"] is not None and (now - _SENTIMENT_CACHE["ts"] < SENTIMENT_CACHE_TTL):
+        return _SENTIMENT_CACHE["data"]
 
-    current_price = safe(latest["Close"])
-    prev_close    = safe(prev["Close"], current_price)
-    change        = round(current_price - prev_close, 2)
-    change_pct    = round((change / prev_close) * 100, 2) if prev_close != 0 else 0.0
+    symbols = {
+        "sox": "^SOX",
+        "tsm_adr": "TSM",
+        "n225": "^N225",
+        "ks11": "^KS11",
+        "usdtwd": "USDTWD=X",
+    }
 
-    ma_20       = safe(latest["20MA"],  current_price)
-    ma_50       = safe(latest["50MA"],  current_price)
-    upper_band  = safe(latest["UpperBand"], current_price)
-    lower_band  = safe(latest["LowerBand"], current_price)
-    rsi         = safe(latest["RSI"], 50.0)
+    def fetch_sym(key: str, sym: str):
+        raw = fetch_via_yahoo_api(sym, use_cache=not force_refresh, force_refresh=force_refresh)
+        if not raw or len(raw["records"]) < 2:
+            return key, None
+        recs = raw["records"]
+        latest_r = recs[-1]
+        prev_r = recs[-2]
+        latest = float(latest_r["Close"])
+        prev = float(prev_r["Close"])
+        pct = ((latest - prev) / prev * 100.0) if prev > 0 else 0.0
+        prov = build_provenance_envelope(
+            symbol=sym,
+            as_of_date=latest_r["Date"],
+            market_ts=raw.get("market_ts"),
+            fetched_at_ts=raw["fetched_at_ts"],
+            cached_at_ts=raw["cached_at_ts"],
+            cache_ttl_sec=STOCK_CACHE_TTL,
+            data_quality_status="OK",
+            is_meta_appended=raw.get("is_meta_appended", False),
+        )
+        return key, {
+            "price": round_twd(latest, 2),
+            "prev_close": round_twd(prev, 2),
+            "pct_change": round_twd(pct, 2),
+            "as_of": latest_r["Date"],
+            "market_time": prov["market_time"],
+            "market_timezone": prov["market_timezone"],
+            "market_status": prov["market_status"],
+            "status_label_zh": prov["status_label_zh"],
+            "unit": prov["unit"],
+            "provider": prov["provider"],
+        }
 
-    diff_20     = round(current_price - ma_20, 2)
-    diff_20_pct = round((diff_20 / ma_20) * 100, 2) if ma_20 != 0 else 0.0
-    diff_50     = round(current_price - ma_50, 2)
-    diff_50_pct = round((diff_50 / ma_50) * 100, 2) if ma_50 != 0 else 0.0
+    raw_details: Dict[str, Any] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+        futures = [executor.submit(fetch_sym, k, s) for k, s in symbols.items()]
+        fut_inst = executor.submit(fetch_twse_institutional_details)
+        for f in concurrent.futures.as_completed(futures):
+            k, v = f.result()
+            raw_details[k] = v
+        inst_info = fut_inst.result()
 
-    is_drop_below_ma20 = current_price < ma_20
-    is_drop_below_ma50 = current_price < ma_50
-    is_overbought      = (rsi >= 75) or (current_price > upper_band and rsi >= 65)
+    raw_details["institutional_info"] = inst_info
+    raw_details["institutional"] = inst_info["total_net_buy_twd"] if inst_info else None
+    raw_details["margin"] = None
 
-    sentiment_data = fetch_market_sentiment() if include_sentiment else {'score': 0, 'details': {}}
-    signal = compute_accumulation_score(current_price, ma_20, ma_50, rsi, sentiment_data['score'])
+    breakdown = compute_sentiment_breakdown(raw_details, ticker_code="2330", asset_type="stock")
+    breakdown["fetched_at"] = datetime.fromtimestamp(now, tz=TZ_TAIPEI).isoformat()
+    breakdown["cache_ttl_sec"] = SENTIMENT_CACHE_TTL
 
-    history_list = []
-    for idx, row in df.tail(35).iterrows():
-        history_list.append({
-            "date": str(idx),
-            "close": safe(row["Close"]),
-            "ma20":       safe(row["20MA"])      if not pd.isna(row["20MA"])      else None,
-            "ma50":       safe(row["50MA"])      if not pd.isna(row["50MA"])      else None,
-            "upper_band": safe(row["UpperBand"]) if not pd.isna(row["UpperBand"]) else None,
-            "lower_band": safe(row["LowerBand"]) if not pd.isna(row["LowerBand"]) else None,
-            "rsi":        safe(row["RSI"])       if not pd.isna(row["RSI"])       else None,
-            "volume": int(row["Volume"])
-        })
+    _SENTIMENT_CACHE["ts"] = now
+    _SENTIMENT_CACHE["data"] = breakdown
+    return breakdown
+
+
+def get_stock_analysis(
+    ticker_symbol: str = "2330.TW",
+    period: str = "6mo",
+    include_sentiment: bool = True,
+    force_refresh: bool = False,
+    custom_records: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    取得單一標的之完整技術指標、資料品質、來源時效契約 (Provenance) 與可解釋規則評分。
+    若提供 custom_records (例如測試案例 A6~A9)，則直接對該固定序列進行確定性計算。
+    """
+    ticker_clean = validate_ticker_symbol(ticker_symbol)
+    now_ts = time.time()
+
+    if custom_records is not None:
+        raw_payload = {
+            "symbol": ticker_clean,
+            "records": custom_records,
+            "meta": {},
+            "market_ts": int(now_ts),
+            "fetched_at_ts": now_ts,
+            "cached_at_ts": now_ts,
+            "is_meta_appended": False,
+        }
+    else:
+        raw_payload = fetch_via_yahoo_api(
+            ticker_clean,
+            use_cache=not force_refresh,
+            force_refresh=force_refresh,
+        )
+        if not raw_payload:
+            return None
+
+    try:
+        tech = compute_full_technical_snapshot(raw_payload["records"])
+    except DataQualityError:
+        return None
 
     code = ticker_clean.replace(".TW", "").replace(".TWO", "")
     name = STOCK_NAMES.get(code, code)
@@ -365,37 +386,95 @@ def get_stock_analysis(ticker_symbol="2330.TW", period="60d", include_sentiment=
         "category": "台股標的",
         "tag": "自選觀察標的",
         "type": "stock",
-        "desc": f"{name} ({ticker_clean}) 技術面與乖離率動態追蹤。"
+        "sector": "其他類股",
+        "desc": f"{name} ({ticker_clean}) 技術指標與乖離率研究追蹤。",
     })
 
+    provenance = build_provenance_envelope(
+        symbol=ticker_clean,
+        as_of_date=tech["latest_date"],
+        market_ts=raw_payload.get("market_ts"),
+        fetched_at_ts=raw_payload["fetched_at_ts"],
+        cached_at_ts=raw_payload["cached_at_ts"],
+        cache_ttl_sec=STOCK_CACHE_TTL,
+        data_quality_status=tech["data_quality_status"],
+        is_meta_appended=raw_payload.get("is_meta_appended", False),
+    )
+
+    if include_sentiment and custom_records is None:
+        base_sen = fetch_market_sentiment(force_refresh=force_refresh)
+        sentiment_data = compute_sentiment_breakdown(
+            base_sen.get("details", {}),
+            ticker_code=code,
+            asset_type=meta_info["type"],
+        )
+    else:
+        sentiment_data = {
+            "model_version": MODEL_VERSION,
+            "status": "SKIPPED_IN_ISOLATED_TEST",
+            "is_complete": False,
+            "missing_factors": [],
+            "score": 0,
+            "details": {},
+        }
+
+    computed_at_iso = datetime.now(TZ_TAIPEI).isoformat()
+    score_res = compute_explainable_score(
+        ticker_code=code,
+        name=name,
+        asset_type=meta_info["type"],
+        tech_snapshot=tech,
+        sentiment_breakdown=sentiment_data,
+        provenance=provenance,
+        computed_at_iso=computed_at_iso,
+    )
+    signal = score_res["signal"]
+
+    snapshot_id = f"snap-{code}-{tech['latest_date']}-{int(raw_payload['cached_at_ts'])}"
+
     return {
+        "snapshot_id": snapshot_id,
+        "model_version": MODEL_VERSION,
         "ticker": ticker_clean,
         "code": code,
         "name": name,
         "category": meta_info["category"],
         "tag": meta_info["tag"],
+        "sector": meta_info.get("sector", "其他"),
         "asset_type": meta_info["type"],
         "asset_desc": meta_info["desc"],
-        "latest_date": str(df.index[-1]),
-        "current_price": current_price,
-        "prev_close": prev_close,
-        "change": change,
-        "change_pct": change_pct,
-        "ma_20": ma_20,
-        "ma_50": ma_50,
-        "diff_20": diff_20,
-        "diff_20_pct": diff_20_pct,
-        "diff_50": diff_50,
-        "diff_50_pct": diff_50_pct,
-        "upper_band": upper_band,
-        "lower_band": lower_band,
-        "rsi": rsi,
-        "is_drop_below_ma20": is_drop_below_ma20,
-        "is_drop_below_ma50": is_drop_below_ma50,
-        "is_overbought": is_overbought,
+        "latest_date": tech["latest_date"],
+        "current_price": tech["current_price"],
+        "prev_close": tech["prev_close"],
+        "change": tech["change"],
+        "change_pct": tech["change_pct"],
+        "volume": tech["volume"],
+        "ma_20": tech["ma_20"],
+        "ma_50": tech["ma_50"],
+        "ma_60": tech["ma_60"],
+        "diff_20": tech["diff_20"],
+        "diff_20_pct": tech["diff_20_pct"],
+        "diff_50": tech["diff_50"],
+        "diff_50_pct": tech["diff_50_pct"],
+        "diff_60": tech["diff_60"],
+        "diff_60_pct": tech["diff_60_pct"],
+        "upper_band": tech["upper_band"],
+        "lower_band": tech["lower_band"],
+        "bollinger_spec": tech["bollinger_spec"],
+        "rsi": tech["rsi"],
+        "rsi_status": tech["rsi_status"],
+        "rsi_warmup_sufficient": tech["rsi_warmup_sufficient"],
+        "is_drop_below_ma20": tech["is_drop_below_ma20"],
+        "is_drop_below_ma50": tech["is_drop_below_ma50"],
+        "is_drop_below_ma60": tech["is_drop_below_ma60"],
+        "is_overbought": tech["is_overbought"],
+        "data_quality_status": provenance["data_quality_status"],
+        "data_quality": tech["data_quality"],
+        "provenance": provenance,
         "accumulation_score": signal,
         "signal": signal,
+        "technical_score_breakdown": score_res["technical_score_breakdown"],
         "sentiment_data": sentiment_data,
-        "status_text": f"{signal['emoji']} {signal['text']}: {signal['score']}分",
-        "history": history_list
+        "status_text": f"{signal['emoji']} {signal['text']} ({signal['score']}分)",
+        "history": tech["history"],
     }
