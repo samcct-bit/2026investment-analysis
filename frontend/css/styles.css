@@ -1,10 +1,7 @@
 /* =====================================================================
-   styles.css  —  台積電 2330 AI 投資分析儀表板 (v2.0)
-   P1 修復：spinner 動畫、error-msg、header RWD、三燈號、RSI 子圖、
-            分配卡片、report-footer、重試按鈕
+   styles.css  —  AI 智慧投資分析助理 V5.0 (五大核心觀察標的版)
 ===================================================================== */
 
-/* ── CSS 變數 ──────────────────────────────────────────────────── */
 :root {
     --bg-gradient:    linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #090d16 100%);
     --card-bg:        rgba(30, 41, 59, 0.65);
@@ -21,7 +18,6 @@
     --font:           'Inter', 'Noto Sans TC', sans-serif;
 }
 
-/* ── Reset ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -32,8 +28,7 @@ body {
     padding: 20px;
 }
 
-/* ── App Container ──────────────────────────────────────────────── */
-.app-container { max-width: 1380px; margin: 0 auto; }
+.app-container { max-width: 1400px; margin: 0 auto; }
 
 /* ─────────────────────────────────────────────────────────────────
    HEADER
@@ -42,14 +37,14 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;          /* ★ 手機版自動換行 */
+    flex-wrap: wrap;
     gap: 16px;
-    margin-bottom: 24px;
-    padding-bottom: 20px;
+    margin-bottom: 22px;
+    padding-bottom: 18px;
     border-bottom: 1px solid var(--card-border);
 }
 
-.header-brand { display: flex; align-items: center; gap: 14px; flex: 1 1 300px; }
+.header-brand { display: flex; align-items: center; gap: 14px; flex: 1 1 320px; }
 
 .brand-icon {
     font-size: 34px;
@@ -60,8 +55,25 @@ body {
     flex-shrink: 0;
 }
 
-.brand-text h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; }
-.subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 3px; }
+.brand-text h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.version-pill {
+    font-size: 12px;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: #fff;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-weight: 600;
+}
+
+.subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
 .header-search { display: flex; gap: 10px; flex-wrap: wrap; }
 
@@ -72,7 +84,7 @@ body {
     padding: 10px 16px;
     border-radius: 8px;
     font-size: 14px;
-    width: 220px;
+    width: 210px;
     outline: none;
     transition: all 0.2s;
 }
@@ -85,15 +97,23 @@ body {
     background: var(--primary);
     color: white;
     border: none;
-    padding: 10px 20px;
+    padding: 10px 18px;
     border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s, opacity 0.2s;
+    transition: background 0.2s, opacity 0.2s, transform 0.1s;
     white-space: nowrap;
 }
 .header-search button:hover  { background: var(--primary-hover); }
 .header-search button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.secondary-btn {
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid var(--card-border) !important;
+}
+.secondary-btn:hover {
+    background: rgba(255,255,255,0.16) !important;
+}
 
 /* ─────────────────────────────────────────────────────────────────
    GLASSMORPHISM CARD
@@ -107,17 +127,161 @@ body {
     box-shadow: 0 8px 32px rgba(0,0,0,0.37);
 }
 
-/* ─────────────────────────────────────────────────────────────────
-   DASHBOARD GRID
-───────────────────────────────────────────────────────────────── */
-.dashboard-grid { display: flex; flex-direction: column; gap: 24px; }
+.dashboard-grid { display: flex; flex-direction: column; gap: 20px; }
 
 /* ─────────────────────────────────────────────────────────────────
-   METRICS ROW (5 cards)
+   0. WATCHLIST OVERVIEW PANEL (五大預設觀察標的)
+───────────────────────────────────────────────────────────────── */
+.watchlist-panel {
+    padding: 18px 22px;
+}
+
+.watchlist-header {
+    margin-bottom: 14px !important;
+}
+
+.watchlist-hint {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-left: 6px;
+}
+
+.watchlist-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+}
+@media (max-width: 1180px) {
+    .watchlist-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+    .watchlist-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 500px) {
+    .watchlist-grid { grid-template-columns: 1fr; }
+}
+
+.watchlist-card {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 13px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    position: relative;
+}
+
+.watchlist-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(59, 130, 246, 0.5);
+    background: rgba(30, 41, 59, 0.85);
+}
+
+.watchlist-card.active {
+    border: 1.5px solid var(--primary);
+    background: linear-gradient(145deg, rgba(59,130,246,0.18), rgba(15,23,42,0.85));
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.25);
+}
+
+.wl-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+}
+
+.wl-category {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+}
+.cat-stock {
+    background: rgba(168, 85, 247, 0.18);
+    color: #c084fc;
+}
+.cat-etf {
+    background: rgba(16, 185, 129, 0.16);
+    color: #34d399;
+}
+
+.wl-score-pill {
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+
+.wl-main-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.wl-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.wl-code {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+}
+
+.wl-name {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.wl-price-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.wl-price {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.wl-change {
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.wl-bottom-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.wl-action-text {
+    font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   1. METRICS ROW (6 cards)
 ───────────────────────────────────────────────────────────────── */
 .metrics-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
     gap: 14px;
 }
 
@@ -134,30 +298,41 @@ body {
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.6px;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .card-value {
-    font-size: 26px;
+    font-size: 25px;
     font-weight: 700;
     color: var(--text-primary);
     line-height: 1.2;
 }
 
-/* 雙標的數據佈局 */
 .dual-metric { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; width: 100%; }
 .main-stock { display: flex; flex-direction: column; }
-.sub-stock { display: flex; flex-direction: column; align-items: flex-end; opacity: 0.75; }
-.stock-name-label { font-size: 10px; color: var(--text-secondary); background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; margin-bottom: 2px; font-weight: 600; width: fit-content; }
+.sub-stock { display: flex; flex-direction: column; align-items: flex-end; opacity: 0.78; }
+.stock-name-label {
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+    font-weight: 600;
+    width: fit-content;
+}
+.primary-label {
+    background: rgba(59,130,246,0.25);
+    color: #93c5fd;
+}
 .sub-stock .card-value { font-size: 16px; font-weight: 500; }
 .sub-stock .card-sub { font-size: 11px; }
 
 .card-sub { font-size: 12px; color: var(--text-secondary); }
 
-.signal-light-row { display: flex; align-items: center; gap: 10px; }
+.signal-light-row { display: flex; align-items: center; gap: 8px; }
 .status-text { font-size: 14px; font-weight: 600; }
 
-/* 正負乖離色彩 */
 .positive { color: var(--success); }
 .negative { color: var(--danger); }
 
@@ -177,7 +352,7 @@ body {
     position: relative;
     width: 65px;
     height: 65px;
-    margin: 8px auto 0;
+    margin: 6px auto 0;
 }
 
 .score-ring {
@@ -199,7 +374,7 @@ body {
     stroke-linecap: round;
     stroke-dasharray: 283;
     stroke-dashoffset: 283;
-    transition: stroke-dashoffset 1s ease-out, stroke 0.5s;
+    transition: stroke-dashoffset 0.8s ease-out, stroke 0.4s;
 }
 
 .score-content {
@@ -214,31 +389,19 @@ body {
     justify-content: center;
 }
 
-.score-value {
-    font-size: 20px;
-    font-weight: 700;
-    line-height: 1;
-}
-
-.score-max {
-    font-size: 10px;
-    color: var(--text-secondary);
-}
-
-.text-center { text-align: center; }
+.score-value { font-size: 20px; font-weight: 700; line-height: 1; }
+.score-max { font-size: 10px; color: var(--text-secondary); }
 
 /* ─────────────────────────────────────────────────────────────────
-   LOADING SPINNER  ★ 新增
+   LOADING SPINNER & ERROR
 ───────────────────────────────────────────────────────────────── */
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .loading-spinner {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 20px 0;
+    padding: 16px 0;
     color: var(--text-secondary);
     font-size: 14px;
 }
@@ -253,9 +416,6 @@ body {
     flex-shrink: 0;
 }
 
-/* ─────────────────────────────────────────────────────────────────
-   ERROR MESSAGE  ★ 新增
-───────────────────────────────────────────────────────────────── */
 .error-msg {
     display: flex;
     align-items: center;
@@ -277,50 +437,31 @@ body {
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
-    transition: background 0.2s;
 }
-.retry-btn:hover { background: rgba(239,68,68,0.35); }
-
 
 /* ─────────────────────────────────────────────────────────────────
-   SENTIMENT PANEL
+   2. SENTIMENT PANEL
 ───────────────────────────────────────────────────────────────── */
-.sentiment-panel {
-    margin-bottom: 20px;
-}
 .sentiment-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 12px;
 }
 .sentiment-item {
     background: rgba(15,23,42,0.6);
-    padding: 12px 16px;
-    border-radius: 8px;
+    padding: 12px 14px;
+    border-radius: 10px;
     border: 1px solid var(--card-border);
-    flex: 1 1 140px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     text-align: center;
 }
-.sen-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-.sen-val {
-    font-size: 16px;
-    font-weight: 600;
-}
-.sentiment-score-bar {
-    text-align: right;
-    font-size: 14px;
-    color: var(--primary);
-}
+.sen-label { font-size: 12px; color: var(--text-secondary); }
+.sen-val { font-size: 15px; font-weight: 600; }
 
 /* ─────────────────────────────────────────────────────────────────
-   MAIN CONTENT ROW (chart left, AI right)
+   3. MAIN CONTENT ROW (chart left, AI right)
 ───────────────────────────────────────────────────────────────── */
 .main-content-row {
     display: grid;
@@ -332,7 +473,7 @@ body {
 }
 
 .panel {
-    padding: 22px 24px;
+    padding: 20px 24px;
     display: flex;
     flex-direction: column;
 }
@@ -341,7 +482,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
     flex-wrap: wrap;
     gap: 8px;
 }
@@ -350,17 +491,14 @@ body {
 
 .badge {
     background: rgba(59,130,246,0.18);
-    color: var(--primary);
-    padding: 3px 10px;
+    color: #60a5fa;
+    padding: 4px 12px;
     border-radius: 20px;
     font-size: 12px;
     font-weight: 600;
 }
-.highlight-badge { background: rgba(245,158,11,0.18); color: var(--warning); }
+.highlight-badge { background: rgba(245,158,11,0.18); color: #fbbf24; }
 
-/* ─────────────────────────────────────────────────────────────────
-   CHART CONTAINERS
-───────────────────────────────────────────────────────────────── */
 .chart-container {
     position: relative;
     width: 100%;
@@ -384,9 +522,8 @@ body {
 .ai-panel { overflow-y: auto; }
 .ai-content { flex: 1; }
 
-/* 大盤趨勢對照摘要 */
 .market-trend-context {
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     padding: 10px 14px;
     background: rgba(59,130,246,0.08);
     border-radius: 8px;
@@ -395,7 +532,17 @@ body {
     color: var(--text-secondary);
 }
 
-/* AI Report Card */
+.overbought-alert {
+    margin: 10px 16px 0;
+    padding: 10px 14px;
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 8px;
+    color: #fcd34d;
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
 .ai-report-card {
     border-radius: 12px;
     overflow: hidden;
@@ -413,21 +560,8 @@ body {
 
 .signal-header h3 { font-size: 15px; font-weight: 600; flex: 1; }
 
-/* 三燈號訊號徽章 */
-.signal-badge {
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-}
-.badge-green   { background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
-.badge-yellow  { background: rgba(245,158,11,0.2); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
-.badge-red     { background: rgba(239,68,68,0.2);  color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
-.badge-neutral { background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.4); }
-
 .report-strategy {
-    font-size: 13px;
+    font-size: 13.5px;
     line-height: 1.65;
     color: var(--text-secondary);
     padding: 14px 16px;
@@ -435,12 +569,7 @@ body {
 }
 
 .report-section { padding: 14px 16px; }
-
-.report-section h4 {
-    font-size: 14px;
-    margin-bottom: 10px;
-    color: #60a5fa;
-}
+.report-section h4 { font-size: 14px; margin-bottom: 10px; color: #60a5fa; }
 
 .recommendation-list {
     list-style: none;
@@ -451,42 +580,43 @@ body {
 
 .recommendation-list li {
     font-size: 13px;
-    background: rgba(15,23,42,0.5);
+    background: rgba(15,23,42,0.55);
     padding: 10px 13px;
     border-radius: 8px;
     border-left: 3px solid var(--primary);
     line-height: 1.6;
 }
 
-/* AI Report Footer */
 .report-footer {
     display: flex;
     justify-content: space-around;
     padding: 12px 16px;
     background: rgba(0,0,0,0.2);
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--text-secondary);
     border-top: 1px solid var(--card-border);
     flex-wrap: wrap;
     gap: 8px;
 }
 
-/* RSI 徽章樣式 */
 .rsi-badge { font-weight: 700; }
 .rsi-oversold  { color: var(--danger); }
 .rsi-overbought { color: var(--warning); }
 
 /* ─────────────────────────────────────────────────────────────────
-   ALLOCATION PANEL
+   4. ALLOCATION PANEL
 ───────────────────────────────────────────────────────────────── */
 .calc-control-row {
     display: grid;
-    grid-template-columns: 1fr 1.8fr auto;
-    gap: 16px;
+    grid-template-columns: 1fr 1.6fr 1.4fr auto;
+    gap: 14px;
     margin-bottom: 20px;
     align-items: end;
 }
-@media (max-width: 768px) {
+@media (max-width: 960px) {
+    .calc-control-row { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
     .calc-control-row { grid-template-columns: 1fr; }
 }
 
@@ -495,12 +625,12 @@ body {
 
 .calc-field input,
 .calc-field select {
-    background: rgba(15,23,42,0.8);
+    background: rgba(15,23,42,0.85);
     border: 1px solid var(--card-border);
     color: var(--text-primary);
     padding: 10px 14px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13.5px;
     outline: none;
     transition: border-color 0.2s;
 }
@@ -520,63 +650,85 @@ body {
 }
 #calcBtn:hover { filter: brightness(1.15); }
 
-.calc-results-grid {
+.calc-results-grid.single-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1fr;
     gap: 16px;
 }
-@media (max-width: 640px) {
-    .calc-results-grid { grid-template-columns: 1fr; }
+
+.calc-results-grid.multi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px;
 }
 
-/* Allocation Cards */
 .stock-alloc-card {
-    background: rgba(15,23,42,0.6);
+    background: rgba(15,23,42,0.65);
     border: 1px solid var(--card-border);
     border-radius: 12px;
     padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 11px;
+    transition: transform 0.2s, border-color 0.2s;
+}
+.stock-alloc-card:hover {
+    border-color: rgba(59, 130, 246, 0.45);
 }
 
-.tsmc-card { border-left: 4px solid var(--success); }
-.market-card { border-left: 4px solid var(--warning); }
+.qualified-card { border-left: 4px solid var(--success); }
+.standby-card   { border-left: 4px solid #3b82f6; }
 
-.stock-alloc-card h4 {
-    font-size: 15px;
+.alloc-card-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
 }
 
-.price-tag {
-    font-size: 13px;
+.alloc-card-top h4 {
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.alloc-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.08);
     color: var(--text-secondary);
-    font-weight: 400;
+    font-weight: 500;
 }
 
+.alloc-role-badge {
+    font-size: 12px;
+    color: #93c5fd;
+    background: rgba(59,130,246,0.12);
+    padding: 4px 10px;
+    border-radius: 6px;
+    width: fit-content;
+}
+
+.price-tag { font-size: 14px; color: #f8fafc; font-weight: 600; }
 .alloc-signal-row { font-size: 13px; }
 .mini-signal { font-weight: 600; }
 
 .alloc-metrics-row {
     display: flex;
-    gap: 16px;
+    gap: 18px;
     flex-wrap: wrap;
+    padding: 8px 0;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-.alloc-metric {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
-
+.alloc-metric { display: flex; flex-direction: column; gap: 2px; }
 .alloc-label { font-size: 11px; color: var(--text-secondary); }
-.alloc-value { font-size: 15px; font-weight: 600; }
+.alloc-value { font-size: 14px; font-weight: 600; }
 
-/* 零股數量大字 */
 .share-result {
     display: flex;
     align-items: baseline;
@@ -584,12 +736,12 @@ body {
 }
 .share-label { font-size: 13px; color: var(--text-secondary); }
 .share-count {
-    font-size: 38px;
+    font-size: 36px;
     font-weight: 700;
     color: var(--success);
     line-height: 1;
 }
-.share-unit { font-size: 16px; color: var(--text-secondary); }
+.share-unit { font-size: 15px; color: var(--text-secondary); }
 
 .cost-row {
     display: flex;
@@ -600,154 +752,69 @@ body {
 }
 .cost-highlight { color: #60a5fa; font-weight: 700; }
 
-.strategy-mode { font-size: 13px; color: var(--text-secondary); }
-.market-info { display: flex; flex-direction: column; gap: 10px; }
+.ref-buy-hint {
+    margin-top: 4px;
+    padding: 9px 12px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px dashed rgba(245, 158, 11, 0.35);
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: #fde68a;
+    line-height: 1.5;
+}
+
+.summary-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.summary-stats-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 14px;
+    padding: 6px 0;
+}
 
 /* ─────────────────────────────────────────────────────────────────
-   GAS INFO PANEL
+   5. STRATEGY GUIDE PANEL
 ───────────────────────────────────────────────────────────────── */
-.gas-instructions {
+.strategy-guide-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 16px;
 }
 
 .step-box {
-    background: rgba(15,23,42,0.4);
+    background: rgba(15,23,42,0.45);
     padding: 18px;
     border-radius: 12px;
     border: 1px solid var(--card-border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-/* 步驟 1：試算表說明佔整行 */
-.step-box-wide {
-    grid-column: 1 / -1;
-}
-
-.step-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: var(--primary);
-    color: white;
-    border-radius: 50%;
+.guide-tag {
+    font-size: 11px;
     font-weight: 700;
-    font-size: 13px;
-    margin-bottom: 10px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    width: fit-content;
 }
+.tag-stock { background: rgba(168,85,247,0.2); color: #c084fc; }
+.tag-etf   { background: rgba(59,130,246,0.2); color: #60a5fa; }
+.tag-compound { background: rgba(16,185,129,0.2); color: #34d399; }
 
-.step-box h4 { font-size: 14px; margin-bottom: 8px; }
-.step-box p  { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+.step-box h4 { font-size: 15px; color: var(--text-primary); }
+.step-box p  { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 
-/* GAS 試算表欄位公式表格 */
-.gas-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-    margin-top: 8px;
-}
-
-.gas-table thead tr {
-    border-bottom: 1px solid var(--card-border);
-}
-
-.gas-table th {
-    padding: 8px 10px;
-    text-align: left;
-    color: var(--text-secondary);
-    font-weight: 600;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-}
-
-.gas-table td {
-    padding: 7px 10px;
-    color: var(--text-primary);
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    vertical-align: middle;
-}
-
-.gas-table tr:last-child td { border-bottom: none; }
-
-.gas-table .row-highlight td {
-    background: rgba(245,158,11,0.08);
-    border-left: 2px solid var(--warning);
-}
-
-/* GAS 功能清單 */
-.gas-features {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    margin-top: 10px;
-}
-
-.gas-feature-item {
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-    padding: 4px 0;
-}
-
-/* GAS 觸發器資訊區塊 */
-.gas-trigger-info {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.trigger-item {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    flex-wrap: wrap;
-    font-size: 13px;
-    color: var(--text-secondary);
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-}
-
-.trigger-item:last-child { border-bottom: none; }
-
-.trigger-label {
-    min-width: 72px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    flex-shrink: 0;
-}
-
-.trigger-time {
-    color: var(--success);
-    font-size: 14px;
-}
-
-.trigger-note {
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-
-code {
-    background: rgba(0,0,0,0.3);
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: #f472b6;
-    font-family: monospace;
-    font-size: 12px;
-}
-
-/* ─────────────────────────────────────────────────────────────────
-   MOBILE
-───────────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
     body { padding: 12px; }
     .brand-text h1 { font-size: 17px; }
-    .card-value { font-size: 22px; }
+    .card-value { font-size: 21px; }
     .share-count { font-size: 30px; }
 }

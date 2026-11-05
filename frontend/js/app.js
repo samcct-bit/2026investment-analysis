@@ -1,66 +1,270 @@
 /** ================================================================
- *  app.js  —  台積電 2330 AI 智慧投資分析前端邏輯 (v2.0)
- *  P1 修復：Promise.all 並行請求 / 三層圖表 / 三燈號 / Loading 動畫
+ *  app.js  —  AI 智慧投資分析助理 V5.0 前端核心邏輯
+ *  支援五大預設觀察標的：2330台積電、2308台達電、0050、006208、009816
+ *  功能：即時觀察總覽列 / 市場情緒雷達 / 三層圖表 / 自選與多標的動態零股試算
  * ================================================================ */
 
 let stockChart  = null;
 let volumeChart = null;
 let rsiChart    = null;
 
-document.addEventListener("DOMContentLoaded", () => {
-    const searchBtn  = document.getElementById("searchBtn");
-    const tickerInput = document.getElementById("tickerInput");
-    const calcBtn    = document.getElementById("calcBtn");
+let currentTicker = "2330.TW";
+let cachedWatchlistMap = {};   // ticker -> summary data
+let cached0050Data = null;
 
-    // 預設載入台積電 2330.TW + 零股試算
-    loadStockData("2330.TW");
-    loadAllocationAdvice();
+document.addEventListener("DOMContentLoaded", () => {
+    const searchBtn      = document.getElementById("searchBtn");
+    const refreshBtn     = document.getElementById("refreshBtn");
+    const tickerInput    = document.getElementById("tickerInput");
+    const calcBtn        = document.getElementById("calcBtn");
+    const strategySelect = document.getElementById("strategySelect");
+    const modeSelect     = document.getElementById("modeSelect");
+
+    // 初次載入：並行啟動五大觀察標的總覽 + 2330 深度分析 + 零股試算
+    initDashboard();
 
     searchBtn.addEventListener("click", () => {
-        const ticker = tickerInput.value.trim() || "2330.TW";
-        searchBtn.disabled = true;
-        searchBtn.textContent = "載入中…";
-        loadStockData(ticker).finally(() => {
-            searchBtn.disabled = false;
-            searchBtn.textContent = "查詢個股";
-        });
+        const raw = tickerInput.value.trim() || "2330.TW";
+        selectTicker(raw);
     });
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", () => {
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = "⏳ 更新中...";
+            initDashboard().finally(() => {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = "🔄 更新報價";
+            });
+        });
+    }
 
     tickerInput.addEventListener("keyup", (e) => {
         if (e.key === "Enter") {
-            loadStockData(tickerInput.value.trim() || "2330.TW");
+            selectTicker(tickerInput.value.trim() || "2330.TW");
         }
     });
 
     calcBtn.addEventListener("click", loadAllocationAdvice);
+    if (strategySelect) strategySelect.addEventListener("change", loadAllocationAdvice);
+    if (modeSelect) modeSelect.addEventListener("change", loadAllocationAdvice);
 });
 
+function normalizeFrontendTicker(raw) {
+    let t = (raw || "2330.TW").trim().toUpperCase();
+    if (!t.endsWith(".TW") && !t.endsWith(".TWO") && /^[0-9A-Z]+$/.test(t)) {
+        t += ".TW";
+    }
+    return t;
+}
+
+async function initDashboard() {
+    await loadWatchlist();
+    await Promise.all([
+        loadStockData(currentTicker),
+        loadAllocationAdvice()
+    ]);
+}
+
+function selectTicker(rawTicker) {
+    const ticker = normalizeFrontendTicker(rawTicker);
+    currentTicker = ticker;
+    const tickerInput = document.getElementById("tickerInput");
+    if (tickerInput) tickerInput.value = ticker;
+
+    // 更新觀察清單卡片 active 樣式
+    document.querySelectorAll(".watchlist-card").forEach(card => {
+        if (card.dataset.ticker === ticker) {
+            card.classList.add("active");
+        } else {
+            card.classList.remove("active");
+        }
+    });
+
+    loadStockData(ticker);
+
+    // 若零股試算器處於「單一標的集中狙擊」，同步切換試算標的
+    const strategySelect = document.getElementById("strategySelect");
+    if (!strategySelect || strategySelect.value === "single_target") {
+        loadAllocationAdvice();
+    }
+}
+
 // ──────────────────────────────────────────────────────────────────
-//  loadStockData：並行抓取主標的 + 0050 大盤
+//  loadWatchlist：載入五大核心觀察標的 (2330, 2308, 0050, 006208, 009816)
+// ──────────────────────────────────────────────────────────────────
+async function loadWatchlist() {
+    const grid = document.getElementById("watchlistGrid");
+    const badge = document.getElementById("watchlistUpdateBadge");
+
+    try {
+        const res = await fetch("/api/watchlist");
+        const resData = await res.json();
+
+        if (!resData.success || !resData.watchlist) {
+            grid.innerHTML = `<div class="error-msg">⚠️ 無法載入觀察標的清單</div>`;
+            return;
+        }
+
+        const list = resData.watchlist;
+        list.forEach(item => {
+            cachedWatchlistMap[item.ticker] = item;
+            if (item.ticker === "0050.TW") {
+                cached0050Data = item;
+            }
+        });
+
+        if (badge && list.length > 0) {
+            badge.innerText = `最新交易日：${list[0].latest_date}`;
+        }
+
+        // 渲染市場情緒雷達
+        if (resData.sentiment_data) {
+            renderSentimentRadar(resData.sentiment_data);
+        }
+
+        // 渲染 5 張觀察標的卡片
+        grid.innerHTML = list.map(item => {
+            const isActive = item.ticker === currentTicker ? "active" : "";
+            const chg = item.change || 0;
+            const chgPct = item.change_pct || 0;
+            const chgColor = chg > 0 ? "var(--danger)" : (chg < 0 ? "var(--success)" : "var(--text-secondary)");
+            const chgIcon = chg > 0 ? "▲" : (chg < 0 ? "▼" : "—");
+            const chgSign = chg > 0 ? "+" : "";
+
+            const diff20 = item.diff_20_pct || 0;
+            const diff20Cls = diff20 >= 0 ? "positive" : "negative";
+            const diff20Sign = diff20 >= 0 ? "+" : "";
+
+            const sig = item.signal || {};
+            const sigColor = sig.color || "#3b82f6";
+            const catClass = item.asset_type === "etf" ? "cat-etf" : "cat-stock";
+
+            return `
+                <div class="watchlist-card ${isActive}" data-ticker="${item.ticker}" onclick="selectTicker('${item.ticker}')">
+                    <div class="wl-top-row">
+                        <span class="wl-category ${catClass}">${item.tag || item.category}</span>
+                        <span class="wl-score-pill" style="background:${sigColor}22; color:${sigColor}; border:1px solid ${sigColor}66;">
+                            ${sig.emoji || "⏸️"} ${sig.score ?? "--"}分
+                        </span>
+                    </div>
+                    <div class="wl-main-row">
+                        <div class="wl-title-group">
+                            <span class="wl-code">${item.code}</span>
+                            <span class="wl-name">${item.name}</span>
+                        </div>
+                        <div class="wl-price-group">
+                            <span class="wl-price">$${item.current_price}</span>
+                            <span class="wl-change" style="color:${chgColor}">
+                                ${chgIcon} ${chgSign}${chg} (${chgSign}${chgPct}%)
+                            </span>
+                        </div>
+                    </div>
+                    <div class="wl-bottom-row">
+                        <span>月線乖離 <strong class="${diff20Cls}">${diff20Sign}${diff20}%</strong></span>
+                        <span>RSI <strong>${item.rsi}</strong></span>
+                        <span class="wl-action-text" style="color:${sigColor}">${sig.text || ""}</span>
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+    } catch (err) {
+        console.error("loadWatchlist error:", err);
+        if (grid) {
+            grid.innerHTML = `<div class="error-msg">⚠️ 觀察清單連線異常，請點擊上方「更新報價」重試。</div>`;
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  renderSentimentRadar：渲染市場情緒雷達
+// ──────────────────────────────────────────────────────────────────
+function renderSentimentRadar(sentiment) {
+    if (!sentiment || !sentiment.details) return;
+    const getTrendIcon = (pct) => {
+        if (pct > 0) return "<span style='color:var(--danger)'>▲</span>";
+        if (pct < 0) return "<span style='color:var(--success)'>▼</span>";
+        return "-";
+    };
+    const formatPct = (pct) => (pct !== undefined && pct !== null) ? (pct > 0 ? "+" : "") + pct.toFixed(2) + "%" : "--";
+    const sd = sentiment.details;
+
+    const summaryBadge = document.getElementById("sentimentSummaryBadge");
+    if (summaryBadge) {
+        const s = sentiment.score || 0;
+        summaryBadge.innerText = `情緒權重加成：${s >= 0 ? "+" + s : s} 分`;
+    }
+
+    const contentHtml = `
+        <div class="sentiment-grid">
+            <div class="sentiment-item">
+                <span class="sen-label">美國費半 (^SOX)</span>
+                <span class="sen-val">${sd.sox ? formatPct(sd.sox.pct_change) : "--"} ${sd.sox ? getTrendIcon(sd.sox.pct_change) : ""}</span>
+            </div>
+            <div class="sentiment-item">
+                <span class="sen-label">台積電 ADR (TSM)</span>
+                <span class="sen-val">${sd.tsm_adr ? formatPct(sd.tsm_adr.pct_change) : "--"} ${sd.tsm_adr ? getTrendIcon(sd.tsm_adr.pct_change) : ""}</span>
+            </div>
+            <div class="sentiment-item">
+                <span class="sen-label">日經指數 (N225)</span>
+                <span class="sen-val">${sd.n225 ? formatPct(sd.n225.pct_change) : "--"} ${sd.n225 ? getTrendIcon(sd.n225.pct_change) : ""}</span>
+            </div>
+            <div class="sentiment-item">
+                <span class="sen-label">韓國綜合 (KS11)</span>
+                <span class="sen-val">${sd.ks11 ? formatPct(sd.ks11.pct_change) : "--"} ${sd.ks11 ? getTrendIcon(sd.ks11.pct_change) : ""}</span>
+            </div>
+            <div class="sentiment-item">
+                <span class="sen-label">美元兌台幣匯率</span>
+                <span class="sen-val">${sd.usdtwd ? "$" + sd.usdtwd.price + " (" + formatPct(sd.usdtwd.pct_change) + ")" : "--"}</span>
+            </div>
+            <div class="sentiment-item">
+                <span class="sen-label">三大法人買賣超</span>
+                <span class="sen-val">${sd.institutional !== null && sd.institutional !== undefined ? (sd.institutional / 100000000).toFixed(1) + " 億" : "盤後更新"}</span>
+            </div>
+        </div>
+    `;
+    const senBox = document.getElementById("sentimentContent");
+    if (senBox) senBox.innerHTML = contentHtml;
+}
+
+// ──────────────────────────────────────────────────────────────────
+//  loadStockData：載入選中標的完整歷史 K 線、指標與 AI 報告
 // ──────────────────────────────────────────────────────────────────
 async function loadStockData(ticker) {
+    const cleanTicker = normalizeFrontendTicker(ticker);
     const aiReportBox = document.getElementById("aiReportBox");
     aiReportBox.innerHTML = `
         <div class="loading-spinner">
             <div class="spinner"></div>
-            <span>載入數據與 AI 評估報告中…</span>
+            <span>載入 ${cleanTicker} 數據與 AI 評估報告中…</span>
         </div>`;
 
-    try {
-        // ★ Promise.all 並行請求，總時間減半
-        const [res, mRes] = await Promise.all([
-            fetch(`/api/stock/${encodeURIComponent(ticker)}`),
-            fetch(`/api/stock/0050.TW`)
-        ]);
+    const searchBtn = document.getElementById("searchBtn");
+    if (searchBtn) {
+        searchBtn.disabled = true;
+        searchBtn.textContent = "載入中…";
+    }
 
-        const resData  = await res.json();
-        const mResData = await mRes.json();
+    try {
+        // 若快取中已有 0050 則不需重複抓，否則並行抓取
+        const requests = [fetch(`/api/stock/${encodeURIComponent(cleanTicker)}`)];
+        if (!cached0050Data) {
+            requests.push(fetch(`/api/stock/0050.TW`));
+        }
+
+        const responses = await Promise.all(requests);
+        const resData = await responses[0].json();
+        if (responses[1]) {
+            const mResData = await responses[1].json();
+            if (mResData.success) cached0050Data = mResData.data;
+        }
 
         if (!resData.success) {
             aiReportBox.innerHTML = `
                 <div class="error-msg">
                     ⚠️ 讀取失敗：${resData.message || "資料取得異常"}
-                    <button class="retry-btn" onclick="loadStockData('${ticker}')">🔄 重試</button>
+                    <button class="retry-btn" onclick="loadStockData('${cleanTicker}')">🔄 重試</button>
                 </div>`;
             return;
         }
@@ -69,19 +273,20 @@ async function loadStockData(ticker) {
         const aiReport = resData.ai_report;
         const signal   = data.signal;
 
-        // ── 大盤趨勢背景摘要 ──
-        let marketSummary = "--";
-        if (mResData.success) {
-            const mData  = mResData.data;
-            const mSig   = mData.signal;
-            marketSummary = `${mSig.emoji} $${mData.current_price} 元 | 月線乖離: ${mData.diff_20_pct}%`;
-            const actionHint = document.getElementById("actionHint");
-            if (actionHint) {
-                actionHint.innerHTML = `📊 大盤(0050)：<strong>${marketSummary}</strong>`;
-            }
-        }
+        // 同步更新觀察清單快取
+        cachedWatchlistMap[data.ticker] = data;
+        if (data.ticker === "0050.TW") cached0050Data = data;
 
-        // ── 更新指標卡片 ──
+        // ── 更新主指標卡片標題與數值 ──
+        const mainStockLabel = document.getElementById("mainStockLabel");
+        if (mainStockLabel) mainStockLabel.innerText = `${data.code} ${data.name}`;
+
+        const scoreCardTitleMain = document.getElementById("scoreCardTitleMain");
+        if (scoreCardTitleMain) scoreCardTitleMain.innerText = `${data.code} ${data.name} 評分`;
+
+        const aiTargetTag = document.getElementById("aiTargetTag");
+        if (aiTargetTag) aiTargetTag.innerText = `${data.code}｜${data.tag || data.category}`;
+
         document.getElementById("currentPrice").innerText = `$${data.current_price}`;
         document.getElementById("latestDate").innerText   = `最後更新: ${data.latest_date}`;
         document.getElementById("ma20Price").innerText    = `$${data.ma_20}`;
@@ -99,24 +304,28 @@ async function loadStockData(ticker) {
         const diff50Sign  = data.diff_50 >= 0 ? "+" : "";
         diff50Elem.innerHTML = `<span class="${diff50Class}">${diff50Sign}${data.diff_50} (${diff50Sign}${data.diff_50_pct}%)</span>`;
 
-        // RSI 卡片（色彩提示超買超賣）
+        // RSI 卡片
         const rsiElem  = document.getElementById("rsiValue");
         const rsiLabel = document.getElementById("rsiLabel");
         rsiElem.innerText = data.rsi ? data.rsi : "--";
         if (data.rsi < 30) {
             rsiElem.style.color = "#ef4444";
-            rsiLabel.innerText  = "⚠️ 超賣區（< 30）";
+            rsiLabel.innerText  = "🔥 超賣買點區 (< 30)";
         } else if (data.rsi > 70) {
             rsiElem.style.color = "#f59e0b";
-            rsiLabel.innerText  = "⚠️ 超買區（> 70）";
+            rsiLabel.innerText  = "⚠️ 短線超買區 (> 70)";
         } else {
             rsiElem.style.color = "var(--text-primary)";
-            rsiLabel.innerText  = "14日標準";
+            rsiLabel.innerText  = "14日 Wilder 標準";
         }
 
-        // ── 寫入 0050 雙軌數據 ──
-        if (mResData.success) {
-            const mData = mResData.data;
+        // ── 寫入 0050 基準對照數據 ──
+        let marketSummary = "--";
+        if (cached0050Data) {
+            const mData = cached0050Data;
+            const mSig  = mData.signal;
+            marketSummary = `${mSig.emoji} $${mData.current_price} 元 | 月線乖離: ${mData.diff_20_pct}% | RSI: ${mData.rsi}`;
+
             document.getElementById("currentPrice0050").innerText = `$${mData.current_price}`;
             document.getElementById("ma20Price0050").innerText = `$${mData.ma_20}`;
             document.getElementById("ma50Price0050").innerText = `$${mData.ma_50}`;
@@ -134,134 +343,98 @@ async function loadStockData(ticker) {
             if (mData.rsi < 30) mRsiElem.style.color = "#ef4444";
             else if (mData.rsi > 70) mRsiElem.style.color = "#f59e0b";
             else mRsiElem.style.color = "var(--text-primary)";
+
+            updateGauge("0050", mSig);
         }
 
-        // ── 加碼評分卡片 (Score Gauge) ──
-        function updateGauge(suffix, signal) {
-            const statusTextElem = document.getElementById("statusText" + suffix);
-            const statusCard     = document.getElementById("statusCard" + suffix);
-            const signalLight    = document.getElementById("signalLight" + suffix);
-            const scoreValueElem = document.getElementById("scoreValue" + suffix);
-            const scoreRingPath  = document.getElementById("scoreRingPath" + suffix);
-
-            if (!statusTextElem) return;
-            statusTextElem.innerText = signal.text;
-            signalLight.innerText    = signal.emoji;
-            
-            const score = signal.score !== undefined ? signal.score : 0;
-            if (scoreValueElem) scoreValueElem.innerText = score;
-
-            const color = signal.color || "#3b82f6";
-            statusTextElem.style.color = color;
-            
-            if (scoreRingPath) {
-                const circumference = 282.7;
-                const offset = circumference - (score / 100) * circumference;
-                scoreRingPath.style.strokeDashoffset = offset;
-                scoreRingPath.style.stroke = color;
-            }
-
-            // 解析 hex color 以設定透明背景
-            let r=59, g=130, b=246; // default blue
-            const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
-            if (hexMatch) {
-                r = parseInt(hexMatch[1], 16);
-                g = parseInt(hexMatch[2], 16);
-                b = parseInt(hexMatch[3], 16);
-            }
-            statusCard.style.background = `rgba(${r},${g},${b},0.15)`;
-            statusCard.style.borderColor = `rgba(${r},${g},${b},0.5)`;
-        }
-
-        updateGauge("2330", signal);
-        if (mResData.success) {
-            updateGauge("0050", mResData.data.signal);
-        }
+        updateGauge("Main", signal);
 
         document.getElementById("chartBadge").innerText = `${data.name} (${data.ticker})`;
 
-        
-        // ── 渲染市場情緒雷達 ──
-        const sentiment = data.sentiment_data;
-        if (sentiment && sentiment.details) {
-            const getTrendIcon = (pct) => {
-                if (pct > 0) return "<span style='color:var(--success)'>▲</span>";
-                if (pct < 0) return "<span style='color:var(--danger)'>▼</span>";
-                return "-";
-            };
-            const formatPct = (pct) => pct ? pct.toFixed(2) + "%" : "--";
-            const sd = sentiment.details;
-            const contentHtml = `
-                <div class="sentiment-grid">
-                    <div class="sentiment-item">
-                        <span class="sen-label">SOX 費半</span>
-                        <span class="sen-val">${sd.sox ? formatPct(sd.sox.pct_change) : "--"} ${sd.sox ? getTrendIcon(sd.sox.pct_change) : ""}</span>
-                    </div>
-                    <div class="sentiment-item">
-                        <span class="sen-label">TSM ADR</span>
-                        <span class="sen-val">${sd.tsm_adr ? formatPct(sd.tsm_adr.pct_change) : "--"} ${sd.tsm_adr ? getTrendIcon(sd.tsm_adr.pct_change) : ""}</span>
-                    </div>
-                    <div class="sentiment-item">
-                        <span class="sen-label">日經 N225</span>
-                        <span class="sen-val">${sd.n225 ? formatPct(sd.n225.pct_change) : "--"} ${sd.n225 ? getTrendIcon(sd.n225.pct_change) : ""}</span>
-                    </div>
-                    <div class="sentiment-item">
-                        <span class="sen-label">韓國 KS11</span>
-                        <span class="sen-val">${sd.ks11 ? formatPct(sd.ks11.pct_change) : "--"} ${sd.ks11 ? getTrendIcon(sd.ks11.pct_change) : ""}</span>
-                    </div>
-                    <div class="sentiment-item">
-                        <span class="sen-label">台幣匯率</span>
-                        <span class="sen-val">${sd.usdtwd ? formatPct(sd.usdtwd.pct_change) : "--"}</span>
-                    </div>
-                    <div class="sentiment-item">
-                        <span class="sen-label">三大法人買賣超</span>
-                        <span class="sen-val">${sd.institutional !== null ? (sd.institutional / 100000000).toFixed(0) + "億" : "--"}</span>
-                    </div>
-                </div>
-                <div class="sentiment-score-bar">
-                    情緒總分加成：<strong>${sentiment.score}</strong> 分
-                </div>
-            `;
-            const senBox = document.getElementById("sentimentContent");
-            if (senBox) senBox.innerHTML = contentHtml;
+        if (data.sentiment_data && data.sentiment_data.details) {
+            renderSentimentRadar(data.sentiment_data);
         }
 
         // ── 渲染 AI 報告 ──
         aiReportBox.innerHTML = `
             <div class="market-trend-context">
-                📢 <strong>大盤趨勢對照 (0050)</strong>：${marketSummary}
+                📢 <strong>大盤基準對照 (0050 元大台灣50)</strong>：${marketSummary}
             </div>
             ${aiReport.report_html}`;
 
         // ── 渲染三層圖表 ──
-        renderCharts(data.history);
+        renderCharts(data.history, `${data.code} ${data.name}`);
 
     } catch (err) {
         console.error("loadStockData error:", err);
         aiReportBox.innerHTML = `
             <div class="error-msg">
                 ⚠️ 系統連線異常，請稍後重試。
-                <button class="retry-btn" onclick="loadStockData('${ticker}')">🔄 重試</button>
+                <button class="retry-btn" onclick="loadStockData('${cleanTicker}')">🔄 重試</button>
             </div>`;
+    } finally {
+        if (searchBtn) {
+            searchBtn.disabled = false;
+            searchBtn.textContent = "查詢個股";
+        }
+    }
+}
+
+function updateGauge(suffix, signal) {
+    const statusTextElem = document.getElementById("statusText" + suffix);
+    const statusCard     = document.getElementById("statusCard" + suffix);
+    const signalLight    = document.getElementById("signalLight" + suffix);
+    const scoreValueElem = document.getElementById("scoreValue" + suffix);
+    const scoreRingPath  = document.getElementById("scoreRingPath" + suffix);
+
+    if (!statusTextElem || !signal) return;
+    statusTextElem.innerText = signal.text;
+    signalLight.innerText    = signal.emoji;
+
+    const score = signal.score !== undefined ? signal.score : 0;
+    if (scoreValueElem) scoreValueElem.innerText = score;
+
+    const color = signal.color || "#3b82f6";
+    statusTextElem.style.color = color;
+
+    if (scoreRingPath) {
+        const circumference = 282.7;
+        const offset = circumference - (score / 100) * circumference;
+        scoreRingPath.style.strokeDashoffset = offset;
+        scoreRingPath.style.stroke = color;
+    }
+
+    let r = 59, g = 130, b = 246;
+    const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+    if (hexMatch) {
+        r = parseInt(hexMatch[1], 16);
+        g = parseInt(hexMatch[2], 16);
+        b = parseInt(hexMatch[3], 16);
+    }
+    if (statusCard) {
+        statusCard.style.background = `rgba(${r},${g},${b},0.15)`;
+        statusCard.style.borderColor = `rgba(${r},${g},${b},0.5)`;
     }
 }
 
 // ──────────────────────────────────────────────────────────────────
-//  loadAllocationAdvice：台積電零股試算
+//  loadAllocationAdvice：自選 / 多標的動態零股加碼試算
 // ──────────────────────────────────────────────────────────────────
 async function loadAllocationAdvice() {
     const calcResultsBox = document.getElementById("calcResultsBox");
-    const budget = document.getElementById("budgetInput").value  || 30000;
-    const mode   = document.getElementById("modeSelect").value   || "single";
+    const budget   = document.getElementById("budgetInput").value || 30000;
+    const mode     = document.getElementById("modeSelect").value || "single";
+    const strategy = document.getElementById("strategySelect")?.value || "single_target";
 
     calcResultsBox.innerHTML = `
         <div class="loading-spinner">
             <div class="spinner"></div>
-            <span>試算台積電 2330 零股購買方案中…</span>
+            <span>正在計算最佳零股股數與資金配置…</span>
         </div>`;
 
     try {
-        const response = await fetch(`/api/allocation?budget=${budget}&mode=${mode}`);
+        const url = `/api/allocation?budget=${budget}&mode=${mode}&strategy=${strategy}&ticker=${encodeURIComponent(currentTicker)}`;
+        const response = await fetch(url);
         const resData  = await response.json();
 
         if (!resData.success) {
@@ -269,87 +442,105 @@ async function loadAllocationAdvice() {
             return;
         }
 
-        const d2  = resData.data_2330;
-        const sig2 = resData.signal_2330;
-        const d0  = resData.data_0050;
-        const sig0 = resData.signal_0050;
-        const mc  = resData.market_context;
+        const allocActiveBadge = document.getElementById("allocActiveBadge");
+        if (allocActiveBadge) {
+            allocActiveBadge.innerText = resData.strategy_title || "動態零股試算";
+        }
 
-        const sc2 = sig2?.color || "#3b82f6";
-        const sc0 = sig0?.color || "#3b82f6";
+        const items = resData.items || [];
+        const isMulti = items.length > 1;
+        calcResultsBox.className = isMulti ? "calc-results-grid multi-grid" : "calc-results-grid single-grid";
 
-        calcResultsBox.innerHTML = `
-            <div class="stock-alloc-card tsmc-card">
-                <h4>💎 2330 台積電 (100% 預算全額狙擊)
-                    <span class="price-tag">$${d2.price} 元 / 股</span>
-                </h4>
-                <div class="alloc-signal-row">
-                    <span class="mini-signal" style="color:${sc2}">${sig2?.emoji || "📊"} ${sig2?.text || ""} (評分: ${sig2?.score})</span>
+        const cardsHtml = items.map(item => {
+            const sig = item.signal || {};
+            const scColor = sig.color || "#3b82f6";
+            const isQualified = item.shares > 0;
+            const borderCls = isQualified ? "qualified-card" : "standby-card";
+
+            // 當紀律評分 < 40 分 (建議 0 股) 時，顯示現價直接買進的參考股數，解決「不知道現價能買幾股」的痛點
+            const refHintHtml = (!isQualified && item.ref_shares > 0) ? `
+                <div class="ref-buy-hint">
+                    💡 <strong>現價換算參考</strong>：若不看評分門檻，以分配預算 <strong>$${formatNum(item.ref_budget)}</strong> 現價直接買進，可買 <strong>${item.ref_shares} 股</strong>（約花費 <strong>$${formatNum(item.ref_cost)}</strong> 元）
                 </div>
-                <div class="alloc-metrics-row">
-                    <div class="alloc-metric">
-                        <span class="alloc-label">月線乖離率</span>
-                        <span class="alloc-value" style="color:${d2.diff_pct < 0 ? '#ef4444':'#10b981'}">${d2.diff_pct}%</span>
+            ` : "";
+
+            return `
+                <div class="stock-alloc-card ${borderCls}" onclick="selectTicker('${item.ticker}')" style="cursor:pointer" title="點擊切換至此標的圖表">
+                    <div class="alloc-card-top">
+                        <h4>
+                            <span>${item.code} ${item.name}</span>
+                            <span class="alloc-tag">${item.tag || item.category}</span>
+                        </h4>
+                        <span class="price-tag">$${item.price} 元 / 股</span>
                     </div>
-                </div>
-                <div class="share-result">
-                    <span class="share-label">建議下單</span>
-                    <span class="share-count">${d2.shares}</span>
-                    <span class="share-unit">股零股</span>
-                </div>
-                <div class="cost-row">
-                    <span>配置預算：<strong>$${formatNum(d2.allocated_budget)}</strong> 元</span>
-                    <span>實際花費：<strong class="cost-highlight">$${formatNum(d2.cost)}</strong> 元</span>
-                </div>
-            </div>
-
-            <div class="stock-alloc-card market-card">
-                <h4>📈 0050 大盤ETF (純定期定額，不佔預算)
-                    <span class="price-tag">$${d0.price} 元 / 股</span>
-                </h4>
-                <div class="alloc-signal-row">
-                    <span class="mini-signal" style="color:${sc0}">${sig0?.emoji || "📊"} ${sig0?.text || ""} (評分: ${sig0?.score})</span>
-                </div>
-                <div class="alloc-metrics-row">
-                    <div class="alloc-metric">
-                        <span class="alloc-label">月線乖離率</span>
-                        <span class="alloc-value" style="color:${d0.diff_pct < 0 ? '#ef4444':'#10b981'}">${d0.diff_pct}%</span>
+                    <div class="alloc-role-badge">${item.role_label}</div>
+                    <div class="alloc-signal-row">
+                        <span class="mini-signal" style="color:${scColor}">
+                            ${sig.emoji || "📊"} ${sig.text || ""} (評分: ${sig.score}/100)
+                        </span>
                     </div>
+                    <div class="alloc-metrics-row">
+                        <div class="alloc-metric">
+                            <span class="alloc-label">20MA 月線乖離</span>
+                            <span class="alloc-value" style="color:${item.diff_pct < 0 ? '#ef4444':'#10b981'}">${item.diff_pct > 0 ? '+' : ''}${item.diff_pct}%</span>
+                        </div>
+                        <div class="alloc-metric">
+                            <span class="alloc-label">RSI-14</span>
+                            <span class="alloc-value">${item.rsi}</span>
+                        </div>
+                        <div class="alloc-metric">
+                            <span class="alloc-label">季線 50MA</span>
+                            <span class="alloc-value">$${item.ma50}</span>
+                        </div>
+                    </div>
+                    <div class="share-result">
+                        <span class="share-label">紀律建議下單</span>
+                        <span class="share-count" style="color:${isQualified ? 'var(--success)' : 'var(--text-secondary)'}">${item.shares}</span>
+                        <span class="share-unit">股零股</span>
+                    </div>
+                    <div class="cost-row">
+                        <span>配置預算：<strong>$${formatNum(item.allocated_budget)}</strong> 元</span>
+                        <span>實際花費：<strong class="cost-highlight">$${formatNum(item.cost)}</strong> 元</span>
+                    </div>
+                    ${refHintHtml}
                 </div>
-                <div class="share-result">
-                    <span class="share-label">建議下單</span>
-                    <span class="share-count">${d0.shares}</span>
-                    <span class="share-unit">股零股</span>
+            `;
+        }).join("");
+
+        const summaryHtml = `
+            <div class="stock-alloc-card summary-card" style="grid-column: 1 / -1; border: 1px dashed rgba(59,130,246,0.6);">
+                <div class="summary-header-row">
+                    <h4>💡 資金配置總結 — ${resData.strategy_title}</h4>
+                    <span class="badge">${resData.mode_title}</span>
                 </div>
-                <div class="cost-row">
-                    <span>配置預算：<strong>$${formatNum(d0.allocated_budget)}</strong> 元</span>
-                    <span>實際花費：<strong class="cost-highlight">$${formatNum(d0.cost)}</strong> 元</span>
+                <div class="summary-stats-row">
+                    <span>💰 總預備金：<strong>$${formatNum(resData.budget)}</strong> 元</span>
+                    <span>🎯 本批可動用上限：<strong>$${formatNum(resData.allocated_pool)}</strong> 元</span>
+                    <span>🛒 紀律建議總花費：<strong class="cost-highlight">$${formatNum(resData.total_cost)}</strong> 元</span>
+                    <span>🛡️ 保留現金：<strong style="color: #10b981">$${formatNum(resData.remaining_cash)}</strong> 元</span>
                 </div>
+                <p style="font-size: 12.5px; color: #94a3b8; margin-top: 4px;">
+                    * <strong>紀律加碼原則</strong>：系統僅在標的評分達 <strong>40 分以上（顯著跌破月/季線或 RSI 偏低）</strong> 時才會正式動用預備金；未達標時建議維持每月定期定額，並可參考卡片下方「現價換算參考」評估股數。
+                </p>
             </div>
-            
-            <div class="stock-alloc-card summary-card" style="grid-column: 1 / -1; margin-top: 15px; border: 1px dashed #3b82f6;">
-                <h4>💡 資金總結 (${resData.mode_title})</h4>
-                <p>總預算: <strong>$${formatNum(resData.budget)}</strong> | 總花費: <strong>$${formatNum(resData.total_cost)}</strong> | 剩餘預備金: <strong style="color: #10b981">$${formatNum(resData.remaining_cash)}</strong></p>
-                <p style="font-size: 13px; color: #94a3b8; margin-top: 5px;">* 僅評分達 40 分以上的標的才會分配資金並建議買進。</p>
-            </div>`;
+        `;
+
+        calcResultsBox.innerHTML = cardsHtml + summaryHtml;
 
     } catch (err) {
         console.error("loadAllocationAdvice error:", err);
-        calcResultsBox.innerHTML = `<div class="error-msg">⚠️ 零股試算連線異常</div>`;
+        calcResultsBox.innerHTML = `<div class="error-msg">⚠️ 零股試算連線異常，請稍後重試。</div>`;
     }
 }
 
-// ──────────────────────────────────────────────────────────────────
-//  formatNum：千分位格式化
-// ──────────────────────────────────────────────────────────────────
 function formatNum(num) {
-    return Number(num).toLocaleString("zh-TW");
+    return Number(num || 0).toLocaleString("zh-TW");
 }
 
 // ──────────────────────────────────────────────────────────────────
 //  renderCharts：三層圖表（價格均線 + 成交量 + RSI）
 // ──────────────────────────────────────────────────────────────────
-function renderCharts(history) {
+function renderCharts(history, stockTitle = "") {
     const labels     = history.map(h => h.date.slice(5));  // MM-DD
     const closes     = history.map(h => h.close);
     const ma20s      = history.map(h => h.ma20);
@@ -369,7 +560,7 @@ function renderCharts(history) {
         interaction: { mode: "index", intersect: false },
     };
 
-    // ── 1. 主圖：收盤價 + 20MA + 50MA + 布林通道 ──
+    // 1. 主圖：收盤價 + 20MA + 50MA + 布林通道
     stockChart = new Chart(
         document.getElementById("stockChart").getContext("2d"),
         {
@@ -378,11 +569,11 @@ function renderCharts(history) {
                 labels,
                 datasets: [
                     {
-                        label: "收盤價",
+                        label: `${stockTitle} 收盤價`,
                         data: closes,
                         borderColor: "#3b82f6",
                         backgroundColor: "rgba(59,130,246,0.08)",
-                        borderWidth: 2, pointRadius: 2, fill: true, tension: 0.2, order: 1
+                        borderWidth: 2.2, pointRadius: 2, fill: true, tension: 0.2, order: 1
                     },
                     {
                         label: "20MA 月線",
@@ -428,7 +619,7 @@ function renderCharts(history) {
         }
     );
 
-    // ── 2. 成交量子圖（上漲紅、下跌綠，台股習慣） ──
+    // 2. 成交量子圖
     const volColors = closes.map((c, i) =>
         i === 0 || c >= closes[i - 1]
             ? "rgba(239,68,68,0.65)"
@@ -461,7 +652,7 @@ function renderCharts(history) {
         }
     );
 
-    // ── 3. RSI 子圖（帶 30/50/70 參考線） ──
+    // 3. RSI 子圖
     rsiChart = new Chart(
         document.getElementById("rsiChart").getContext("2d"),
         {

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="台積電 2330 AI 智慧投資分析儀表板：三燈號複合訊號、月線季線監控、RSI 超賣判斷、零股加碼試算">
-    <title>2330 台積電 AI 智慧投資分析 — 零股加碼系統</title>
+    <meta name="description" content="AI 智慧投資分析助理：2330台積電、2308台達電、0050、006208、009816 五大核心觀察標的即時監控、市場情緒雷達與零股加碼試算">
+    <title>AI 智慧投資分析助理 V5.0 — 五大核心標的監控 & 零股加碼系統</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -20,31 +20,49 @@
             <div class="header-brand">
                 <div class="brand-icon">💎</div>
                 <div class="brand-text">
-                    <h1>台積電 2330 AI 智慧投資分析助理</h1>
-                    <p class="subtitle">三燈號複合訊號 | 月線季線雙確認 | RSI 超賣偵測 | 零股加碼試算</p>
+                    <h1>AI 智慧投資分析助理 <span class="version-pill">V5.0</span></h1>
+                    <p class="subtitle">五大預設核心標的 (2330 / 2308 / 0050 / 006208 / 009816) ｜ 市場情緒雷達 ｜ 均線與 RSI 複合訊號 ｜ 動態零股試算</p>
                 </div>
             </div>
             <div class="header-search">
                 <input type="text" id="tickerInput" value="2330.TW"
-                       placeholder="股票代碼 (如 2330.TW)">
+                       placeholder="自訂股票代碼 (如 2454.TW)">
                 <button id="searchBtn">查詢個股</button>
+                <button id="refreshBtn" class="secondary-btn" title="重新整理五大標的與即時數據">🔄 更新報價</button>
             </div>
         </header>
 
         <!-- 主內容 -->
         <main class="dashboard-grid">
 
-            <!-- 1. 核心指標卡片列 (5 張) -->
+            <!-- 0. 五大預設觀察標的即時總覽卡片列 (Watchlist Bar) -->
+            <section class="panel watchlist-panel glass">
+                <div class="panel-header watchlist-header">
+                    <div>
+                        <h3>🎯 五大核心觀察標的即時總覽 <span class=" watchlist-hint">（點擊任一標的卡片可切換下方深度圖表、AI 報告與單一狙擊試算）</span></h3>
+                    </div>
+                    <span class="badge" id="watchlistUpdateBadge">即時同步中...</span>
+                </div>
+                <div class="watchlist-grid" id="watchlistGrid">
+                    <!-- 由 app.js 動態渲染 5 張預設觀察標的卡片 -->
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <span>正在並行載入 2330、2308、0050、006208、009816 即時行情…</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 1. 核心指標卡片列 (6 張：當前選中標的 vs 0050 大盤基準) -->
             <section class="metrics-row">
                 <div class="metric-card glass">
                     <span class="card-label">目前股價</span>
                     <div class="dual-metric">
                         <div class="main-stock">
-                            <span class="stock-name-label">2330</span>
+                            <span class="stock-name-label primary-label" id="mainStockLabel">2330 台積電</span>
                             <div class="card-value" id="currentPrice">--</div>
                         </div>
                         <div class="sub-stock">
-                            <span class="stock-name-label">0050</span>
+                            <span class="stock-name-label">0050 基準</span>
                             <div class="card-value" id="currentPrice0050">--</div>
                         </div>
                     </div>
@@ -89,25 +107,25 @@
                         </div>
                     </div>
                 </div>
-                <div class="metric-card glass score-gauge-card" id="statusCard2330">
-                    <span class="card-label">2330 加碼評分</span>
+                <div class="metric-card glass score-gauge-card" id="statusCardMain">
+                    <span class="card-label" id="scoreCardTitleMain">2330 加碼評分</span>
                     <div class="score-ring-container">
                         <svg class="score-ring" viewBox="0 0 100 100">
                             <circle class="score-ring-bg" cx="50" cy="50" r="45"></circle>
-                            <circle class="score-ring-path" id="scoreRingPath2330" cx="50" cy="50" r="45"></circle>
+                            <circle class="score-ring-path" id="scoreRingPathMain" cx="50" cy="50" r="45"></circle>
                         </svg>
                         <div class="score-content">
-                            <span class="score-value" id="scoreValue2330">--</span>
+                            <span class="score-value" id="scoreValueMain">--</span>
                             <span class="score-max">/100</span>
                         </div>
                     </div>
                     <div class="signal-light-row" style="justify-content: center; margin-top: 5px;">
-                        <span id="signalLight2330" style="font-size: 16px;">⏳</span>
-                        <div class="status-text" id="statusText2330" style="font-size: 13px;">讀取中...</div>
+                        <span id="signalLightMain" style="font-size: 16px;">⏳</span>
+                        <div class="status-text" id="statusTextMain" style="font-size: 13px;">讀取中...</div>
                     </div>
                 </div>
                 <div class="metric-card glass score-gauge-card" id="statusCard0050">
-                    <span class="card-label">0050 加碼評分</span>
+                    <span class="card-label">0050 大盤評分</span>
                     <div class="score-ring-container">
                         <svg class="score-ring" viewBox="0 0 100 100">
                             <circle class="score-ring-bg" cx="50" cy="50" r="45"></circle>
@@ -125,39 +143,39 @@
                 </div>
             </section>
 
-            
-            <!-- NEW: 市場情緒雷達 -->
+            <!-- 2. 市場情緒雷達 -->
             <section class="panel sentiment-panel glass">
                 <div class="panel-header">
-                    <h3>🌍 市場情緒雷達 (影響 2330 加碼評分)</h3>
+                    <h3>🌍 全球與台股市場情緒雷達 (納入加碼評分權重 -15 ~ +20 分)</h3>
+                    <span class="badge" id="sentimentSummaryBadge">載入中...</span>
                 </div>
                 <div id="sentimentContent" class="sentiment-content">
                     <div class="loading-spinner">
                         <div class="spinner"></div>
-                        <span>載入情緒數據中...</span>
+                        <span>載入費半、ADR、日韓股、匯率與三大法人數據中...</span>
                     </div>
                 </div>
             </section>
-            
-            <!-- 2. 圖表 + AI 報告雙欄 -->
+
+            <!-- 3. 圖表 + AI 報告雙欄 -->
             <section class="main-content-row">
                 <!-- 左欄：三層圖表（價格 + 成交量 + RSI） -->
                 <div class="panel chart-panel glass">
                     <div class="panel-header">
-                        <h3>📊 歷史走勢 / 均線 / 成交量 / RSI</h3>
+                        <h3>📊 歷史走勢 / 20MA月線 / 50MA季線 / 布林通道 / RSI</h3>
                         <span class="badge" id="chartBadge">2330.TW</span>
                     </div>
                     <!-- 主圖：收盤價 + 20MA + 50MA + 布林通道 -->
-                    <div class="chart-container" style="height: 260px;">
+                    <div class="chart-container" style="height: 265px;">
                         <canvas id="stockChart"></canvas>
                     </div>
                     <!-- 成交量子圖 -->
-                    <div class="chart-sublabel">📦 成交量</div>
+                    <div class="chart-sublabel">📦 成交量 (紅漲綠跌)</div>
                     <div class="chart-container" style="height: 65px;">
                         <canvas id="volumeChart"></canvas>
                     </div>
                     <!-- RSI 子圖 -->
-                    <div class="chart-sublabel">📈 RSI-14 <span class="rsi-legend"><span style="color:#ef4444">■</span> 30 超賣  <span style="color:#f59e0b">■</span> 70 超買</span></div>
+                    <div class="chart-sublabel">📈 RSI-14 <span class="rsi-legend"><span style="color:#ef4444">■</span> 30 超賣買點  <span style="color:#f59e0b">■</span> 70 超買警戒</span></div>
                     <div class="chart-container" style="height: 80px;">
                         <canvas id="rsiChart"></canvas>
                     </div>
@@ -166,7 +184,8 @@
                 <!-- 右欄：AI 智慧報告 -->
                 <div class="panel ai-panel glass">
                     <div class="panel-header">
-                        <h3>🤖 AI 加碼策略 & 乖離率分層建議</h3>
+                        <h3>🤖 AI 專屬加碼策略 & 乖離率分層建議</h3>
+                        <span class="badge highlight-badge" id="aiTargetTag">AI 晶圓代工龍頭</span>
                     </div>
                     <div class="ai-content" id="aiReportBox">
                         <div class="loading-spinner">
@@ -177,104 +196,65 @@
                 </div>
             </section>
 
-            <!-- 3. 台積電零股加碼試算 -->
+            <!-- 4. 自選 / 多標的動態零股加碼試算器 -->
             <section class="panel allocation-panel glass">
                 <div class="panel-header">
-                    <h3>💎 2330 零股加碼試算 (全額狙擊)</h3>
-                    <span class="badge highlight-badge">2330 & 0050 雙標的零股配重試算</span>
+                    <h3>💎 智慧零股加碼試算器 (支援單一標的狙擊 & 五大標的動態配重)</h3>
+                    <span class="badge highlight-badge" id="allocActiveBadge">當前試算標的：2330 台積電</span>
                 </div>
-                <div class="calc-control-row">
+                <div class="calc-control-row calc-control-4col">
                     <div class="calc-field">
                         <label for="budgetInput">💡 擬投入預備金總額 (NTD)</label>
                         <input type="number" id="budgetInput" value="30000" min="1000" step="1000">
                     </div>
                     <div class="calc-field">
-                        <label for="modeSelect">🎯 加碼分批策略</label>
+                        <label for="strategySelect">🧭 試算標的策略模式</label>
+                        <select id="strategySelect">
+                            <option value="single_target" selected>🎯 單一標的 100% 集中狙擊（跟隨目前點選標的）</option>
+                            <option value="smart_all">🌐 五大觀察標的智慧配重（評分 ≥ 40 依強度自動分配）</option>
+                            <option value="stocks_only">⚡ 雙龍頭個股專攻（2330 台積電 + 2308 台達電，ETF 純定投）</option>
+                        </select>
+                    </div>
+                    <div class="calc-field">
+                        <label for="modeSelect">🎯 加碼分批比例</label>
                         <select id="modeSelect">
-                            <option value="single" selected>🚀 單次即刻加碼（100% 現價進場）</option>
+                            <option value="single" selected>🚀 單次即刻加碼（100% 預算進場）</option>
                             <option value="tranche2">⚖️ 二階段分批（首批 50% 進場，50% 預留）</option>
                             <option value="tranche3">🛡️ 三階段鐵板（首批 33% 進場，67% 預留）</option>
                         </select>
                     </div>
                     <div class="calc-field btn-field">
-                        <button id="calcBtn">計算 2330 全額狙擊零股股數</button>
+                        <button id="calcBtn">立即試算零股股數</button>
                     </div>
                 </div>
                 <div class="calc-results-grid" id="calcResultsBox">
                     <div class="loading-spinner">
                         <div class="spinner"></div>
-                        <span>計算雙標的零股最佳股數中...</span>
+                        <span>計算最佳零股股數與資金配置中...</span>
                     </div>
                 </div>
             </section>
 
-            <!-- 4. GAS 設定說明 -->
+            <!-- 5. 五大核心觀察標的投資策略指南 -->
             <section class="panel info-panel glass">
                 <div class="panel-header">
-                    <h3>🛠️ GAS 自動提醒設定說明（僅在台股開盤日執行）</h3>
+                    <h3>🧭 五大核心觀察標的定位與長線配置指南</h3>
                 </div>
-                <div class="gas-instructions">
-                    <div class="step-box step-box-wide">
-                        <span class="step-num">1</span>
-                        <h4>建立 Google 試算表</h4>
-                        <p style="margin-bottom: 10px;">依照以下欄位配置您的試算表，讓 GAS 能自動讀取台積電與大盤資料：</p>
-                        <table class="gas-table">
-                            <thead>
-                                <tr><th>儲存格</th><th>內容</th><th>公式範例</th></tr>
-                            </thead>
-                            <tbody>
-                                <tr><td><code>A2</code></td><td>台積電代碼</td><td><code>TPE:2330</code></td></tr>
-                                <tr><td><code>B2</code></td><td>台積電現價</td><td><code>=GOOGLEFINANCE(A2,"price")</code></td></tr>
-                                <tr><td><code>C2</code></td><td>20日月線</td><td><code>=AVERAGE(GOOGLEFINANCE(A2,"close",TODAY()-30,TODAY(),"DAILY"))</code></td></tr>
-                                <tr class="row-highlight"><td><code>D2</code></td><td>50日季線 ★新增</td><td><code>=AVERAGE(GOOGLEFINANCE(A2,"close",TODAY()-75,TODAY(),"DAILY"))</code></td></tr>
-                                <tr><td><code>E2</code></td><td>最後通知日（自動寫入）</td><td>留空，GAS 執行後自動填入</td></tr>
-                                <tr class="row-highlight"><td><code>F1</code></td><td>預備金預算 ★可自訂</td><td><code>30000</code>（直接填入數字，GAS 自動讀取）</td></tr>
-                                <tr><td><code>A3</code></td><td>大盤代碼</td><td><code>TPE:0050</code></td></tr>
-                                <tr><td><code>B3</code></td><td>大盤現價</td><td><code>=GOOGLEFINANCE(A3,"price")</code></td></tr>
-                                <tr><td><code>C3</code></td><td>大盤 20MA</td><td><code>=AVERAGE(GOOGLEFINANCE(A3,"close",TODAY()-30,TODAY(),"DAILY"))</code></td></tr>
-                                <tr class="row-highlight"><td><code>D3</code></td><td>大盤 50MA ★新增</td><td><code>=AVERAGE(GOOGLEFINANCE(A3,"close",TODAY()-75,TODAY(),"DAILY"))</code></td></tr>
-                                <tr><td><code>E3</code></td><td>大盤趨勢狀態</td><td><code>=IF(B3&lt;C3,"大盤走弱","大盤偏多")</code></td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-
+                <div class="strategy-guide-grid">
                     <div class="step-box">
-                        <span class="step-num">2</span>
-                        <h4>部署開盤日過濾腳本（v2.0）</h4>
-                        <p>將本專案 <code>gas/Code.gs</code> 的程式碼複製至 Google Apps Script 編輯器並儲存。</p>
-                        <div class="gas-features">
-                            <div class="gas-feature-item">✅ 自動排除週末（週六、週日）</div>
-                            <div class="gas-feature-item">✅ 比對 Yahoo Finance 最新交易日，自動排除春節、颱風假等休市日</div>
-                            <div class="gas-feature-item">✅ 三燈號複合訊號（🟢月線 + 🔵季線 + 📊RSI）</div>
-                            <div class="gas-feature-item">✅ 預備金從 <strong>F1 儲存格</strong>讀取，修改預算不需改程式碼</div>
-                            <div class="gas-feature-item">✅ 已修正台北時區跨日 Bug（v2.0 新增）</div>
-                            <div class="gas-feature-item">✅ 發信去重機制（當日只發送一次，寫回 E2）</div>
-                        </div>
+                        <span class="guide-tag tag-stock">龍頭個股</span>
+                        <h4>2330 台積電 & 2308 台達電</h4>
+                        <p>分別掌握「AI 先進製程晶圓代工」與「AI 伺服器電源與液冷散熱」雙核心護城河。波動彈性較市值型 ETF 大，最適合在<strong>股價跌破 20MA 月線或 50MA 季線（評分 ≥ 40 分）</strong>時，動用預備金分批買進零股壓低成本。</p>
                     </div>
-
                     <div class="step-box">
-                        <span class="step-num">3</span>
-                        <h4>設定每小時自動巡邏 (盤中監控)</h4>
-                        <p>在 GAS 編輯器左欄點選「觸發條件」，新增時間型觸發器：</p>
-                        <div class="gas-trigger-info">
-                            <div class="trigger-item">
-                                <span class="trigger-label">執行函數</span>
-                                <code>checkMarketAndNotify</code>
-                            </div>
-                            <div class="trigger-item">
-                                <span class="trigger-label">活動來源</span>
-                                <span>時間驅動 (Time-driven)</span>
-                            </div>
-                            <div class="trigger-item">
-                                <span class="trigger-label">時間間隔</span>
-                                <strong class="trigger-time">每小時執行一次</strong>
-                                <span class="trigger-note">（或每半小時）</span>
-                            </div>
-                            <div class="trigger-item">
-                                <span class="trigger-label">智慧防擾</span>
-                                <span>系統僅於 09:00~13:45 啟動，同級別分數一天只會發送一次。若分數暴衝至新級別則會發送緊急通知。</span>
-                            </div>
-                        </div>
+                        <span class="guide-tag tag-etf">經典市值型 ETF</span>
+                        <h4>0050 元大台灣50 & 006208 富邦台50</h4>
+                        <p>追蹤臺灣 50 指數，涵蓋台股前 50 大權值企業，具備自動汰弱留強機制。<strong>0050</strong> 規模與流動性居冠，<strong>006208</strong> 則具備較低經理費優勢，兩者皆是每月<strong>定期定額</strong>參與台股長線成長的標準配備。</p>
+                    </div>
+                    <div class="step-box">
+                        <span class="guide-tag tag-compound">不配息複利型 ETF</span>
+                        <h4>009816 凱基台灣TOP50</h4>
+                        <p>追蹤特選臺灣 TOP 50 指數，最大特色為<strong>「不配息、股息自動滾入淨值再投資」</strong>，加上極低經理費（約 0.07%），能免除股利所得稅、二代健保補充保費與手動再投入的摩擦成本，發揮極致複利效應。</p>
                     </div>
                 </div>
             </section>
